@@ -7,16 +7,30 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 	"metadata-service/internal/model"
+	"metadata-service/internal/provider"
 	"metadata-service/internal/resolver"
+	"metadata-service/internal/store"
 )
 
 type Handlers struct {
-	resolver resolver.Resolver
+	resolver    resolver.Resolver
+	registry    *provider.Registry
+	rateLimiter *provider.RateLimiter
+	cfgStore    store.ProviderConfigStore
+	statusStore store.ProviderStatusStore
 }
 
-func NewHandlers(res resolver.Resolver) *Handlers {
-	return &Handlers{resolver: res}
+func NewHandlers(res resolver.Resolver, registry *provider.Registry, rl *provider.RateLimiter, cfgStore store.ProviderConfigStore, statusStore store.ProviderStatusStore) *Handlers {
+	return &Handlers{
+		resolver:    res,
+		registry:    registry,
+		rateLimiter: rl,
+		cfgStore:    cfgStore,
+		statusStore: statusStore,
+	}
 }
+
+// --- Metadata endpoints ---
 
 func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
@@ -70,6 +84,81 @@ func (h *Handlers) GetWork(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, WorkResponse{Work: *work})
 }
+
+// --- Provider management endpoints ---
+
+func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
+	cfgs, err := h.cfgStore.GetAll(r.Context())
+	if err != nil {
+		writeError(w, "failed to load provider configs", http.StatusInternalServerError)
+		return
+	}
+	statuses, _ := h.statusStore.GetAll(r.Context())
+	writeJSON(w, ProvidersResponse{Providers: mergeProviderInfo(cfgs, statuses)})
+}
+
+func (h *Handlers) UpsertProvider(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	if name == "" {
+		writeError(w, "missing provider name", http.StatusBadRequest)
+		return
+	}
+
+	var req UpsertProviderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	cfg, err := h.cfgStore.GetByName(r.Context(), name)
+	if err != nil {
+		// new provider — create with defaults
+		cfg = &store.ProviderConfig{Name: name, Enabled: true, Priority: 100, TimeoutSec: 10, RateLimit: 60}
+	}
+
+	if req.Enabled != nil {
+		cfg.Enabled = *req.Enabled
+		h.registry.SetEnabled(name, *req.Enabled)
+	}
+	if req.Priority != nil {
+		cfg.Priority = *req.Priority
+	}
+	if req.TimeoutSec != nil {
+		cfg.TimeoutSec = *req.TimeoutSec
+	}
+	if req.RateLimit != nil {
+		cfg.RateLimit = *req.RateLimit
+		h.rateLimiter.Configure(name, *req.RateLimit)
+	}
+	if req.APIKey != nil {
+		cfg.APIKey = *req.APIKey
+	}
+
+	if err := h.cfgStore.Upsert(r.Context(), *cfg); err != nil {
+		writeError(w, "failed to save provider config", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) TestProvider(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	p, ok := h.registry.Get(name)
+	if !ok {
+		writeError(w, "provider not found", http.StatusNotFound)
+		return
+	}
+
+	works, err := p.SearchWorks(r.Context(), "test")
+	if err != nil {
+		writeJSON(w, ProviderTestResponse{Provider: name, Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, ProviderTestResponse{Provider: name, Success: true, Works: works})
+}
+
+// --- helpers ---
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")

@@ -12,3 +12,21 @@ providers:
   openlibrary:
     enabled: true
     timeout_seconds: 10
+    rate_limit: 100
+    priority: 100
+  googlebooks:
+    enabled: false
+    timeout_seconds: 10
+    rate_limit: 100
+    priority: 200
+    api_key: ""
+  hardcover:
+    enabled: false
+    timeout_seconds: 15
+    rate_limit: 60
+    priority: 300
+    api_key: ""
+
+health_monitor:
+  enabled: true
+  interval_minutes: 5

@@ -16,6 +16,8 @@ import (
 	"metadata-service/internal/cache"
 	"metadata-service/internal/config"
 	"metadata-service/internal/provider"
+	"metadata-service/internal/provider/googlebooks"
+	"metadata-service/internal/provider/hardcover"
 	"metadata-service/internal/provider/openlibrary"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
@@ -35,7 +37,8 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to load config")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// database
 	pool, err := store.NewPool(ctx, cfg)
@@ -43,16 +46,19 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
 	defer pool.Close()
-
 	log.Info().Str("host", cfg.Database.Host).Msg("connected to database")
 
 	// stores
+	providerCfgStore := store.NewProviderConfigStore(pool)
+	providerStatusStore := store.NewProviderStatusStore(pool)
+
 	stores := resolver.Stores{
 		Works:    store.NewWorkStore(pool),
 		Authors:  store.NewAuthorStore(pool),
 		Editions: store.NewEditionStore(pool),
 		IDs:      store.NewIdentifierStore(pool),
 		Mappings: store.NewProviderMappingStore(pool),
+		Status:   providerStatusStore,
 	}
 
 	// cache
@@ -61,22 +67,60 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to create cache")
 	}
 
+	// rate limiter
+	rl := provider.NewRateLimiter()
+
 	// provider registry
 	registry := provider.NewRegistry()
-	if p, ok := cfg.Providers["openlibrary"]; ok && p.Enabled {
-		timeout := p.TimeoutSeconds
+
+	// register providers from config
+	for name, pc := range cfg.Providers {
+		timeout := pc.TimeoutSeconds
 		if timeout == 0 {
 			timeout = 10
 		}
-		registry.Register(openlibrary.New(timeout))
-		log.Info().Msg("registered provider: openlibrary")
+		priority := pc.Priority
+		if priority == 0 {
+			priority = 100
+		}
+		rateLimit := pc.RateLimit
+		if rateLimit == 0 {
+			rateLimit = 60
+		}
+
+		var p provider.Provider
+		switch name {
+		case "openlibrary":
+			p = openlibrary.New(timeout)
+		case "googlebooks":
+			p = googlebooks.New(timeout, pc.APIKey)
+		case "hardcover":
+			p = hardcover.New(timeout, pc.APIKey)
+		default:
+			log.Warn().Str("provider", name).Msg("unknown provider in config, skipping")
+			continue
+		}
+
+		registry.RegisterWithConfig(p, priority, pc.Enabled)
+		rl.Configure(name, rateLimit)
+		log.Info().Str("provider", name).Bool("enabled", pc.Enabled).Int("priority", priority).Msg("registered provider")
 	}
 
 	// resolver
-	res := resolver.New(registry, stores, c)
+	res := resolver.New(registry, rl, stores, c)
+
+	// health monitor
+	if cfg.HealthMonitor.Enabled {
+		interval := time.Duration(cfg.HealthMonitor.IntervalMinutes) * time.Minute
+		if interval == 0 {
+			interval = 5 * time.Minute
+		}
+		monitor := provider.NewHealthMonitor(registry, providerStatusStore, interval)
+		go monitor.Start(ctx)
+	}
 
 	// API
-	handlers := api.NewHandlers(res)
+	handlers := api.NewHandlers(res, registry, rl, providerCfgStore, providerStatusStore)
 	router := api.NewRouter(handlers)
 
 	srv := &http.Server{
@@ -99,7 +143,10 @@ func main() {
 	<-quit
 
 	log.Info().Msg("shutting down gracefully")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 	_ = srv.Shutdown(shutdownCtx)
 }
+
+
