@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"testing"
+	"time"
 
 	"metadata-service/internal/model"
 )
@@ -157,4 +158,53 @@ func TestRegistry_SetPriority_ChangesDispatchOrder(t *testing.T) {
 func TestRegistry_SetPriority_UnknownName_NoPanic(t *testing.T) {
 	reg := NewRegistry()
 	reg.SetPriority("nonexistent", 5) // must not panic
+}
+
+func TestRegistry_TimeoutFor_DefaultWhenNotSet(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"p"})
+
+	got := reg.TimeoutFor("p")
+	if got != defaultProviderTimeout {
+		t.Errorf("expected default timeout %v, got %v", defaultProviderTimeout, got)
+	}
+}
+
+func TestRegistry_TimeoutFor_FallbackForUnknown(t *testing.T) {
+	reg := NewRegistry()
+	got := reg.TimeoutFor("missing")
+	if got != defaultProviderTimeout {
+		t.Errorf("unknown provider should return default timeout, got %v", got)
+	}
+}
+
+func TestRegistry_SetTimeout_OverridesDefault(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"slow"})
+	reg.SetTimeout("slow", 30*time.Second)
+
+	got := reg.TimeoutFor("slow")
+	if got != 30*time.Second {
+		t.Errorf("expected 30s timeout after SetTimeout, got %v", got)
+	}
+}
+
+func TestRegistry_SetTimeout_UnknownName_NoPanic(t *testing.T) {
+	reg := NewRegistry()
+	reg.SetTimeout("nonexistent", 5*time.Second) // must not panic
+}
+
+func TestRegistry_SetTimeout_IndependentPerProvider(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"fast"})
+	reg.Register(&stubProvider{"slow"})
+	reg.SetTimeout("fast", 5*time.Second)
+	reg.SetTimeout("slow", 30*time.Second)
+
+	if got := reg.TimeoutFor("fast"); got != 5*time.Second {
+		t.Errorf("fast timeout: want 5s, got %v", got)
+	}
+	if got := reg.TimeoutFor("slow"); got != 30*time.Second {
+		t.Errorf("slow timeout: want 30s, got %v", got)
+	}
 }

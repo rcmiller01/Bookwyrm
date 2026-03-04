@@ -136,8 +136,9 @@ func main() {
 			continue
 		}
 		registry.RegisterWithConfig(p, bc.priority, bc.enabled)
+		registry.SetTimeout(name, time.Duration(bc.timeout)*time.Second)
 		rl.Configure(name, bc.rate)
-		log.Info().Str("provider", name).Bool("enabled", bc.enabled).Int("priority", bc.priority).Msg("registered provider")
+		log.Info().Str("provider", name).Bool("enabled", bc.enabled).Int("priority", bc.priority).Int("timeout_sec", bc.timeout).Msg("registered provider")
 	}
 
 	// resolver

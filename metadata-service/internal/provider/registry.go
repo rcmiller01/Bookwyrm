@@ -3,12 +3,16 @@ package provider
 import (
 	"sort"
 	"sync"
+	"time"
 )
+
+const defaultProviderTimeout = 10 * time.Second
 
 type registeredProvider struct {
 	provider Provider
 	priority int
 	enabled  bool
+	timeout  time.Duration
 }
 
 type Registry struct {
@@ -26,6 +30,7 @@ func (r *Registry) Register(p Provider) {
 }
 
 // RegisterWithConfig adds a provider with explicit priority and enabled state.
+// Call SetTimeout after registration to override the default 10s timeout.
 func (r *Registry) RegisterWithConfig(p Provider, priority int, enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -33,6 +38,7 @@ func (r *Registry) RegisterWithConfig(p Provider, priority int, enabled bool) {
 		provider: p,
 		priority: priority,
 		enabled:  enabled,
+		timeout:  defaultProviderTimeout,
 	}
 }
 
@@ -53,6 +59,26 @@ func (r *Registry) SetPriority(name string, priority int) {
 	if rp, ok := r.providers[name]; ok {
 		rp.priority = priority
 	}
+}
+
+// SetTimeout stores the per-provider context deadline used by the resolver.
+func (r *Registry) SetTimeout(name string, d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if rp, ok := r.providers[name]; ok {
+		rp.timeout = d
+	}
+}
+
+// TimeoutFor returns the configured timeout for a provider.
+// Falls back to defaultProviderTimeout if the provider is unknown.
+func (r *Registry) TimeoutFor(name string) time.Duration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if rp, ok := r.providers[name]; ok {
+		return rp.timeout
+	}
+	return defaultProviderTimeout
 }
 
 func (r *Registry) Get(name string) (Provider, bool) {

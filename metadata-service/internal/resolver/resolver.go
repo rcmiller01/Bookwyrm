@@ -95,45 +95,61 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		return dbResults, nil
 	}
 
-	// query providers concurrently, ordered by priority
-	providers := r.registry.EnabledProviders()
-	resultsCh := make(chan []model.Work, len(providers))
-
-	var wg sync.WaitGroup
-	for _, p := range providers {
+	// Pre-gate: apply rate limiting before sizing the channel or launching goroutines.
+	// This ensures resultsCh capacity exactly matches the number of active workers,
+	// and no goroutine is launched for a provider that will be skipped.
+	type activeProvider struct {
+		p       provider.Provider
+		timeout time.Duration
+	}
+	all := r.registry.EnabledProviders()
+	var active []activeProvider
+	for _, p := range all {
 		if !r.rateLimiter.Allow(p.Name()) {
 			log.Warn().Str("provider", p.Name()).Msg("rate limited, skipping")
 			continue
 		}
+		active = append(active, activeProvider{p: p, timeout: r.registry.TimeoutFor(p.Name())})
+	}
+
+	resultsCh := make(chan []model.Work, len(active))
+
+	var wg sync.WaitGroup
+	for _, ap := range active {
 		wg.Add(1)
-		go func(p provider.Provider) {
+		go func(ap activeProvider) {
 			defer wg.Done()
 			pStart := time.Now()
-			metrics.ProviderRequestsTotal.WithLabelValues(p.Name()).Inc()
+			metrics.ProviderRequestsTotal.WithLabelValues(ap.p.Name()).Inc()
 
-			// per-provider timeout from config (default 10s)
-			pCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			// Derive context from caller — if the request is abandoned the
+			// parent ctx is cancelled, which propagates here immediately.
+			// The per-provider deadline caps long-running upstreams independently.
+			pCtx, cancel := context.WithTimeout(ctx, ap.timeout)
 			defer cancel()
 
-			results, err := p.SearchWorks(pCtx, cq.Normalized)
+			results, err := ap.p.SearchWorks(pCtx, cq.Normalized)
 			elapsed := time.Since(pStart).Milliseconds()
-			metrics.ProviderLatencyMs.WithLabelValues(p.Name()).Observe(float64(elapsed))
+			metrics.ProviderLatencyMs.WithLabelValues(ap.p.Name()).Observe(float64(elapsed))
 
 			if err != nil {
-				metrics.ProviderFailuresTotal.WithLabelValues(p.Name()).Inc()
-				log.Warn().Err(err).Str("provider", p.Name()).Msg("provider search failed")
+				metrics.ProviderFailuresTotal.WithLabelValues(ap.p.Name()).Inc()
+				log.Warn().Err(err).Str("provider", ap.p.Name()).Msg("provider search failed")
 				if r.status != nil {
-					_ = r.status.RecordFailure(context.Background(), p.Name())
+					_ = r.status.RecordFailure(context.Background(), ap.p.Name())
 				}
 				return
 			}
 			if r.status != nil {
-				_ = r.status.RecordSuccess(context.Background(), p.Name(), elapsed)
+				_ = r.status.RecordSuccess(context.Background(), ap.p.Name(), elapsed)
 			}
 			resultsCh <- results
-		}(p)
+		}(ap)
 	}
 
+	// The resolver owns channel closure; workers only send.
+	// The closer goroutine waits until every launched worker has called wg.Done()
+	// before closing, so range-over-channel in the collector below terminates cleanly.
 	go func() {
 		wg.Wait()
 		close(resultsCh)
