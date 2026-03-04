@@ -8,26 +8,26 @@
 
 ## Prerequisites
 
-- [ ] Validate Phase 1 success criteria (deferred)
+- [ ] Validate Phase 1 success criteria (deferred — requires live DB)
 - [ ] Phase 1 service running stably
 
 ---
 
 ## Database
 
-- [ ] Write migration: `provider_configs` table (provider name, enabled, priority, timeout, rate limit)
-- [ ] Write migration: `provider_status` table (provider name, status, last_checked, failure_count)
+- [x] Write migration: `provider_configs` table (provider name, enabled, priority, timeout, rate limit)
+- [x] Write migration: `provider_status` table (provider name, status, last_checked, failure_count)
 
 ---
 
 ## Provider System
 
-- [ ] Implement `ProviderConfigStore` interface and PostgreSQL implementation
-- [ ] Implement `ProviderStatusStore` interface and PostgreSQL implementation
-- [ ] Extend `Registry` to load provider config from database at startup
-- [ ] Add provider priority ordering to `Registry.EnabledProviders()`
-- [ ] Implement provider rate limiter (token bucket per provider)
-- [ ] Implement provider health monitor (background ping / failure tracking)
+- [x] Implement `ProviderConfigStore` interface and PostgreSQL implementation
+- [x] Implement `ProviderStatusStore` interface and PostgreSQL implementation
+- [x] Extend `Registry` to load provider config from database at startup
+- [x] Add provider priority ordering to `Registry.EnabledProviders()`
+- [x] Implement provider rate limiter (token bucket per provider)
+- [x] Implement provider health monitor (background ping / failure tracking)
 
 ---
 
@@ -35,47 +35,47 @@
 
 ### Google Books
 
-- [ ] Implement `internal/provider/googlebooks/provider.go`
-- [ ] Map `SearchWorks` using Google Books Volumes API (`https://www.googleapis.com/books/v1/volumes?q=`)
-- [ ] Map `ResolveIdentifier` using ISBN lookup (`?q=isbn:`)
-- [ ] Map fields: title, authors, publisher, publication year, ISBN identifiers
-- [ ] Add Google Books to provider registration in `main.go`
+- [x] Implement `internal/provider/googlebooks/provider.go`
+- [x] Map `SearchWorks` using Google Books Volumes API (`https://www.googleapis.com/books/v1/volumes?q=`)
+- [x] Map `ResolveIdentifier` using ISBN lookup (`?q=isbn:`)
+- [x] Map fields: title, authors, publisher, publication year, ISBN identifiers
+- [x] Add Google Books to provider registration in `main.go`
 
 ### Hardcover
 
-- [ ] Research Hardcover API availability and authentication
-- [ ] Implement `internal/provider/hardcover/provider.go`
-- [ ] Map canonical fields to Hardcover response schema
-- [ ] Add Hardcover to provider registration in `main.go`
+- [x] Research Hardcover API availability and authentication
+- [x] Implement `internal/provider/hardcover/provider.go`
+- [x] Map canonical fields to Hardcover response schema
+- [x] Add Hardcover to provider registration in `main.go`
 
 ---
 
 ## Provider Configuration API
 
-- [ ] Add `GET /v1/providers` — list all registered providers and their status
-- [ ] Add `POST /v1/providers` — create/update provider configuration
-- [ ] Add `POST /v1/providers/{id}/test` — trigger a test query against a specific provider
-- [ ] Add provider API handlers to `internal/api/handlers.go`
-- [ ] Add provider routes to `internal/api/router.go`
-- [ ] Add provider API types to `internal/api/types.go`
+- [x] Add `GET /v1/providers` — list all registered providers and their status
+- [x] Add `POST /v1/providers/{name}` — create/update provider configuration
+- [x] Add `POST /v1/providers/{name}/test` — trigger a test query against a specific provider
+- [x] Add provider API handlers to `internal/api/handlers.go`
+- [x] Add provider routes to `internal/api/router.go`
+- [x] Add provider API types to `internal/api/types.go`
 
 ---
 
 ## Resolver Improvements
 
-- [ ] Update resolver to respect provider priority ordering during dispatch
-- [ ] Add per-provider timeout enforcement in concurrent dispatch goroutines
-- [ ] Add provider failure fallback: if all providers fail, return cached/DB result
-- [ ] Track provider success/failure counts after each query
+- [x] Update resolver to respect provider priority ordering during dispatch
+- [x] Add per-provider timeout enforcement in concurrent dispatch goroutines
+- [x] Add provider failure fallback: if all providers fail, return cached/DB result
+- [x] Track provider success/failure counts after each query
 
 ---
 
 ## Observability
 
-- [ ] Add `provider_requests_total` Prometheus counter (label: provider name)
-- [ ] Add `provider_failures_total` Prometheus counter (label: provider name)
-- [ ] Add `provider_latency_ms` Prometheus histogram (label: provider name)
-- [ ] Expose provider health status via `GET /v1/providers`
+- [x] Add `provider_requests_total` Prometheus counter (label: provider name)
+- [x] Add `provider_failures_total` Prometheus counter (label: provider name)
+- [x] Add `provider_latency_ms` Prometheus histogram (label: provider name)
+- [x] Expose provider health status via `GET /v1/providers`
 
 ---
 
@@ -97,6 +97,10 @@
 - [ ] `GET /v1/providers` returns live provider status
 
 ---
+
+## Commit
+
+- [x] `feat: Phase 2 multi-provider system` — committed `4f165b4` (16 files, +1161/-46)
 
 ## Reference Documents
 
