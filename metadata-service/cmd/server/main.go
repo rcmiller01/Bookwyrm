@@ -73,37 +73,71 @@ func main() {
 	// provider registry
 	registry := provider.NewRegistry()
 
-	// register providers from config
+	// Build provider configs: YAML (with env var overrides already applied) supplies
+	// defaults and API keys; DB is authoritative for operational fields
+	// (enabled, priority, rate_limit, timeout) so operators can change them without
+	// restarting the service via the provider management API.
+	type buildCfg struct {
+		timeout, rate, priority int
+		enabled                 bool
+		apiKey                  string
+	}
+	builds := make(map[string]buildCfg)
 	for name, pc := range cfg.Providers {
-		timeout := pc.TimeoutSeconds
-		if timeout == 0 {
-			timeout = 10
+		t := pc.TimeoutSeconds
+		if t == 0 {
+			t = 10
 		}
-		priority := pc.Priority
-		if priority == 0 {
-			priority = 100
+		r := pc.RateLimit
+		if r == 0 {
+			r = 60
 		}
-		rateLimit := pc.RateLimit
-		if rateLimit == 0 {
-			rateLimit = 60
+		p := pc.Priority
+		if p == 0 {
+			p = 100
 		}
+		builds[name] = buildCfg{timeout: t, rate: r, priority: p, enabled: pc.Enabled, apiKey: pc.APIKey}
+	}
 
+	dbCfgs, dbErr := providerCfgStore.GetAll(ctx)
+	if dbErr != nil {
+		log.Warn().Err(dbErr).Msg("could not load provider config from DB, using config.yaml defaults")
+	} else {
+		for _, dc := range dbCfgs {
+			bc := builds[dc.Name] // inherit YAML defaults (api_key, timeout) if present
+			bc.enabled = dc.Enabled
+			bc.priority = dc.Priority
+			if dc.RateLimit > 0 {
+				bc.rate = dc.RateLimit
+			}
+			if dc.TimeoutSec > 0 {
+				bc.timeout = dc.TimeoutSec
+			}
+			// API key: prefer YAML/env (already applied by config.Load) over DB
+			if bc.apiKey == "" && dc.APIKey != "" {
+				bc.apiKey = dc.APIKey
+			}
+			builds[dc.Name] = bc
+		}
+		log.Info().Int("count", len(dbCfgs)).Msg("loaded provider config from database")
+	}
+
+	for name, bc := range builds {
 		var p provider.Provider
 		switch name {
 		case "openlibrary":
-			p = openlibrary.New(timeout)
+			p = openlibrary.New(bc.timeout)
 		case "googlebooks":
-			p = googlebooks.New(timeout, pc.APIKey)
+			p = googlebooks.New(bc.timeout, bc.apiKey)
 		case "hardcover":
-			p = hardcover.New(timeout, pc.APIKey)
+			p = hardcover.New(bc.timeout, bc.apiKey)
 		default:
 			log.Warn().Str("provider", name).Msg("unknown provider in config, skipping")
 			continue
 		}
-
-		registry.RegisterWithConfig(p, priority, pc.Enabled)
-		rl.Configure(name, rateLimit)
-		log.Info().Str("provider", name).Bool("enabled", pc.Enabled).Int("priority", priority).Msg("registered provider")
+		registry.RegisterWithConfig(p, bc.priority, bc.enabled)
+		rl.Configure(name, bc.rate)
+		log.Info().Str("provider", name).Bool("enabled", bc.enabled).Int("priority", bc.priority).Msg("registered provider")
 	}
 
 	// resolver

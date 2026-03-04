@@ -45,6 +45,16 @@ func (r *Registry) SetEnabled(name string, enabled bool) {
 	}
 }
 
+// SetPriority updates a provider's execution priority at runtime.
+// Lower numbers are dispatched first by EnabledProviders.
+func (r *Registry) SetPriority(name string, priority int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if rp, ok := r.providers[name]; ok {
+		rp.priority = priority
+	}
+}
+
 func (r *Registry) Get(name string) (Provider, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

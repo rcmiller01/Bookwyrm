@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -62,7 +63,7 @@ func Load(path string) (*Config, error) {
 	}
 	// API key overrides via environment (e.g. PROVIDER_GOOGLEBOOKS_API_KEY)
 	for name, pc := range cfg.Providers {
-		envKey := "PROVIDER_" + name + "_API_KEY"
+		envKey := "PROVIDER_" + strings.ToUpper(name) + "_API_KEY"
 		if v := os.Getenv(envKey); v != "" {
 			pc.APIKey = v
 			cfg.Providers[name] = pc

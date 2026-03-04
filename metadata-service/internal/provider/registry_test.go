@@ -135,3 +135,26 @@ func TestRegistry_Get(t *testing.T) {
 		t.Error("Get should return false for unknown provider")
 	}
 }
+
+func TestRegistry_SetPriority_ChangesDispatchOrder(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"first"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"second"}, 20, true)
+
+	// Flip priorities at runtime
+	reg.SetPriority("first", 99)
+	reg.SetPriority("second", 1)
+
+	got := reg.EnabledProviders()
+	if got[0].Name() != "second" {
+		t.Errorf("after SetPriority, expected 'second' first, got %q", got[0].Name())
+	}
+	if got[1].Name() != "first" {
+		t.Errorf("after SetPriority, expected 'first' second, got %q", got[1].Name())
+	}
+}
+
+func TestRegistry_SetPriority_UnknownName_NoPanic(t *testing.T) {
+	reg := NewRegistry()
+	reg.SetPriority("nonexistent", 5) // must not panic
+}

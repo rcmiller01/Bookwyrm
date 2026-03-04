@@ -122,6 +122,7 @@ func (h *Handlers) UpsertProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Priority != nil {
 		cfg.Priority = *req.Priority
+		h.registry.SetPriority(name, *req.Priority)
 	}
 	if req.TimeoutSec != nil {
 		cfg.TimeoutSec = *req.TimeoutSec
