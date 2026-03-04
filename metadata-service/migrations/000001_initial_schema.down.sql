@@ -1,0 +1,10 @@
+DROP INDEX IF EXISTS idx_provider_mapping;
+DROP TABLE IF EXISTS provider_mappings;
+DROP INDEX IF EXISTS idx_identifier_unique;
+DROP TABLE IF EXISTS identifiers;
+DROP TABLE IF EXISTS editions;
+DROP TABLE IF EXISTS work_authors;
+DROP INDEX IF EXISTS idx_works_fingerprint;
+DROP INDEX IF EXISTS idx_works_title;
+DROP TABLE IF EXISTS works;
+DROP TABLE IF EXISTS authors;
