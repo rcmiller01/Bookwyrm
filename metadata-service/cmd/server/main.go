@@ -19,9 +19,12 @@ import (
 	"metadata-service/internal/enrichment/handlers"
 	"metadata-service/internal/graph"
 	"metadata-service/internal/provider"
+	"metadata-service/internal/provider/annasarchive"
 	"metadata-service/internal/provider/googlebooks"
 	"metadata-service/internal/provider/hardcover"
+	"metadata-service/internal/provider/librarything"
 	"metadata-service/internal/provider/openlibrary"
+	"metadata-service/internal/provider/worldcat"
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
@@ -107,6 +110,7 @@ func main() {
 		timeout, rate, priority int
 		enabled                 bool
 		apiKey                  string
+		baseURL                 string
 	}
 	builds := make(map[string]buildCfg)
 	for name, pc := range cfg.Providers {
@@ -122,7 +126,7 @@ func main() {
 		if p == 0 {
 			p = 100
 		}
-		builds[name] = buildCfg{timeout: t, rate: r, priority: p, enabled: pc.Enabled, apiKey: pc.APIKey}
+		builds[name] = buildCfg{timeout: t, rate: r, priority: p, enabled: pc.Enabled, apiKey: pc.APIKey, baseURL: pc.BaseURL}
 	}
 
 	dbCfgs, dbErr := providerCfgStore.GetAll(ctx)
@@ -157,6 +161,12 @@ func main() {
 			p = googlebooks.New(bc.timeout, bc.apiKey)
 		case "hardcover":
 			p = hardcover.New(bc.timeout, bc.apiKey)
+		case "annasarchive":
+			p = annasarchive.New(bc.timeout, bc.baseURL)
+		case "librarything":
+			p = librarything.New(bc.timeout, bc.baseURL)
+		case "worldcat":
+			p = worldcat.New(bc.timeout, bc.baseURL)
 		default:
 			log.Warn().Str("provider", name).Msg("unknown provider in config, skipping")
 			continue

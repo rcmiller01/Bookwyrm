@@ -39,6 +39,7 @@ type ProviderConfig struct {
 	RateLimit       int    `yaml:"rate_limit"`
 	Priority        int    `yaml:"priority"`
 	APIKey          string `yaml:"api_key"`
+	BaseURL         string `yaml:"base_url"`
 	QuarantineMode  string `yaml:"quarantine_mode"`
 	DisableDispatch bool   `yaml:"disable_dispatch"`
 }

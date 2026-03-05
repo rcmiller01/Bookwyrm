@@ -45,3 +45,23 @@ Runtime behavior:
 - Results are deterministic (`score DESC`, then `work_id ASC`).
 - Responses include explainability through `reasons`.
 - Recommendation caching and scoring defaults are controlled via the `recommendation` config block in `configs/config.yaml` (or defaults in code when omitted).
+
+## Advanced Metadata Sources (Phase 8)
+
+Optional provider adapters were added for broader edition discovery coverage:
+
+- `annasarchive`
+- `librarything`
+- `worldcat`
+
+These providers are disabled by default and can be enabled in `configs/config.yaml`.
+
+Phase 8 also adds additive schema tables:
+
+- `content_sources`
+- `file_metadata`
+
+Migration files:
+
+- `migrations/000006_advanced_metadata_sources.up.sql`
+- `migrations/000006_advanced_metadata_sources.down.sql`

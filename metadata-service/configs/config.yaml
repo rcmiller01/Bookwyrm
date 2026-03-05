@@ -29,6 +29,24 @@ providers:
     rate_limit: 60
     priority: 300
     api_key: ""
+  annasarchive:
+    enabled: false
+    timeout_seconds: 15
+    rate_limit: 30
+    priority: 400
+    base_url: "https://annas-archive.org"
+  librarything:
+    enabled: false
+    timeout_seconds: 15
+    rate_limit: 30
+    priority: 500
+    base_url: "https://www.librarything.com"
+  worldcat:
+    enabled: false
+    timeout_seconds: 15
+    rate_limit: 30
+    priority: 600
+    base_url: "https://www.worldcat.org"
 
 health_monitor:
   enabled: true
@@ -44,3 +62,20 @@ enrichment:
   preferences:
     languages: ["en"]
     formats: ["epub", "audiobook"]
+
+recommendation:
+  cache_ttl_hours: 2
+  max_depth: 2
+  max_candidate_pool: 250
+  series_limit: 10
+  author_limit: 25
+  max_subjects: 10
+  max_works_per_subject: 10
+  relationship_limit: 100
+  weights:
+    series_neighbor: 1.00
+    same_series: 0.85
+    same_author: 0.70
+    shared_subject: 0.55
+    explicit_related: 0.90
+    preference_boost: 0.05
