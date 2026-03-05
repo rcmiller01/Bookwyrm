@@ -16,6 +16,13 @@ func NewRouter(h *Handlers) http.Handler {
 	v1.HandleFunc("/search", h.Search).Methods(http.MethodGet)
 	v1.HandleFunc("/resolve", h.Resolve).Methods(http.MethodGet)
 	v1.HandleFunc("/work/{id}", h.GetWork).Methods(http.MethodGet)
+	v1.HandleFunc("/work/{id}/recommendations", h.GetWorkRecommendations).Methods(http.MethodGet)
+	v1.HandleFunc("/work/{id}/next", h.GetNextInSeries).Methods(http.MethodGet)
+	v1.HandleFunc("/work/{id}/similar", h.GetSimilarWorks).Methods(http.MethodGet)
+	v1.HandleFunc("/work/{id}/graph", h.GetWorkGraph).Methods(http.MethodGet)
+	v1.HandleFunc("/series/{id}", h.GetSeries).Methods(http.MethodGet)
+	v1.HandleFunc("/subjects/{id}/works", h.GetSubjectWorks).Methods(http.MethodGet)
+	v1.HandleFunc("/graph/stats", h.GetGraphStats).Methods(http.MethodGet)
 
 	// Provider management endpoints
 	v1.HandleFunc("/providers", h.ListProviders).Methods(http.MethodGet)

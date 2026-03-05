@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"metadata-service/internal/model"
 	"metadata-service/internal/provider"
+	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
 
@@ -18,26 +20,42 @@ import (
 
 type Handlers struct {
 	resolver          resolver.Resolver
+	recommender       recommendationService
 	registry          *provider.Registry
 	rateLimiter       *provider.RateLimiter
 	cfgStore          store.ProviderConfigStore
 	statusStore       store.ProviderStatusStore
 	reliabilityStore  store.ReliabilityStore
 	enrichmentStore   store.EnrichmentJobStore
+	workStore         store.WorkStore
+	seriesStore       store.SeriesStore
+	subjectStore      store.SubjectStore
+	workRelStore      store.WorkRelationshipStore
 	enrichmentEnabled bool
 	enrichmentWorkers int
 	policySource      string
 	policyMode        string
 }
 
+type recommendationService interface {
+	Recommend(ctx context.Context, req recommend.RecommendationRequest) ([]recommend.RecommendationResult, error)
+	RecommendNextInSeries(ctx context.Context, workID string) (*recommend.RecommendationResult, error)
+	RecommendSimilar(ctx context.Context, workID string, limit int, preferences recommend.RecommendationPreferences) ([]recommend.RecommendationResult, error)
+}
+
 func NewHandlers(
 	res resolver.Resolver,
+	recommender recommendationService,
 	registry *provider.Registry,
 	rl *provider.RateLimiter,
 	cfgStore store.ProviderConfigStore,
 	statusStore store.ProviderStatusStore,
 	reliabilityStore store.ReliabilityStore,
 	enrichmentStore store.EnrichmentJobStore,
+	workStore store.WorkStore,
+	seriesStore store.SeriesStore,
+	subjectStore store.SubjectStore,
+	workRelStore store.WorkRelationshipStore,
 	enrichmentEnabled bool,
 	enrichmentWorkers int,
 	policySource string,
@@ -45,17 +63,37 @@ func NewHandlers(
 ) *Handlers {
 	return &Handlers{
 		resolver:          res,
+		recommender:       recommender,
 		registry:          registry,
 		rateLimiter:       rl,
 		cfgStore:          cfgStore,
 		statusStore:       statusStore,
 		reliabilityStore:  reliabilityStore,
 		enrichmentStore:   enrichmentStore,
+		workStore:         workStore,
+		seriesStore:       seriesStore,
+		subjectStore:      subjectStore,
+		workRelStore:      workRelStore,
 		enrichmentEnabled: enrichmentEnabled,
 		enrichmentWorkers: enrichmentWorkers,
 		policySource:      policySource,
 		policyMode:        policyMode,
 	}
+}
+
+func splitCSVParam(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 // --- Metadata endpoints ---
@@ -111,6 +149,274 @@ func (h *Handlers) GetWork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, WorkResponse{Work: *work})
+}
+
+// GetWorkGraph handles GET /v1/work/{id}/graph.
+func (h *Handlers) GetWorkGraph(w http.ResponseWriter, r *http.Request) {
+	if h.workStore == nil || h.seriesStore == nil || h.subjectStore == nil || h.workRelStore == nil {
+		writeError(w, "graph stores not configured", http.StatusServiceUnavailable)
+		return
+	}
+	workID := mux.Vars(r)["id"]
+	if strings.TrimSpace(workID) == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+
+	series, _ := h.seriesStore.GetSeriesForWork(r.Context(), workID)
+	seriesItems := []model.SeriesEntry{}
+	if series != nil {
+		entries, err := h.seriesStore.GetSeriesEntries(r.Context(), series.ID)
+		if err != nil {
+			writeError(w, "failed to load work graph", http.StatusInternalServerError)
+			return
+		}
+		seriesItems = entries
+	}
+
+	subjects, err := h.subjectStore.GetSubjectsForWork(r.Context(), workID)
+	if err != nil {
+		writeError(w, "failed to load work graph", http.StatusInternalServerError)
+		return
+	}
+
+	relationships, err := h.workRelStore.GetRelatedWorks(r.Context(), workID, nil, 50)
+	if err != nil {
+		writeError(w, "failed to load work graph", http.StatusInternalServerError)
+		return
+	}
+	related := make([]RelatedWork, 0, len(relationships))
+	for _, rel := range relationships {
+		target, targetErr := h.workStore.GetWorkByID(r.Context(), rel.TargetWorkID)
+		if targetErr != nil {
+			continue
+		}
+		related = append(related, RelatedWork{
+			RelationshipType: rel.RelationshipType,
+			Confidence:       rel.Confidence,
+			Provider:         rel.Provider,
+			Work:             *target,
+		})
+	}
+
+	writeJSON(w, WorkGraphResponse{
+		WorkID:      workID,
+		Series:      series,
+		SeriesItems: seriesItems,
+		Subjects:    subjects,
+		Related:     related,
+	})
+}
+
+// GetSeries handles GET /v1/series/{id}.
+func (h *Handlers) GetSeries(w http.ResponseWriter, r *http.Request) {
+	if h.seriesStore == nil {
+		writeError(w, "series store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := mux.Vars(r)["id"]
+	if strings.TrimSpace(id) == "" {
+		writeError(w, "missing series id", http.StatusBadRequest)
+		return
+	}
+
+	series, err := h.seriesStore.GetSeriesByID(r.Context(), id)
+	if err != nil {
+		writeError(w, "series not found", http.StatusNotFound)
+		return
+	}
+	entries, err := h.seriesStore.GetSeriesEntries(r.Context(), id)
+	if err != nil {
+		writeError(w, "failed to load series entries", http.StatusInternalServerError)
+		return
+	}
+	works := make([]model.Work, 0, len(entries))
+	if h.workStore != nil {
+		for _, entry := range entries {
+			work, workErr := h.workStore.GetWorkByID(r.Context(), entry.WorkID)
+			if workErr != nil {
+				continue
+			}
+			works = append(works, *work)
+		}
+	}
+
+	writeJSON(w, SeriesResponse{Series: *series, Entries: entries, Works: works})
+}
+
+// GetSubjectWorks handles GET /v1/subjects/{id}/works.
+func (h *Handlers) GetSubjectWorks(w http.ResponseWriter, r *http.Request) {
+	if h.subjectStore == nil {
+		writeError(w, "subject store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := mux.Vars(r)["id"]
+	if strings.TrimSpace(id) == "" {
+		writeError(w, "missing subject id", http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeError(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		if parsed > 200 {
+			parsed = 200
+		}
+		limit = parsed
+	}
+
+	subject, err := h.subjectStore.GetSubjectByID(r.Context(), id)
+	if err != nil {
+		writeError(w, "subject not found", http.StatusNotFound)
+		return
+	}
+	works, err := h.subjectStore.GetWorksForSubject(r.Context(), id, limit, 0)
+	if err != nil {
+		writeError(w, "failed to load subject works", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, SubjectWorksResponse{Subject: *subject, Works: works})
+}
+
+// GetGraphStats handles GET /v1/graph/stats.
+func (h *Handlers) GetGraphStats(w http.ResponseWriter, r *http.Request) {
+	if h.seriesStore == nil || h.subjectStore == nil || h.workRelStore == nil {
+		writeError(w, "graph stores not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	seriesCount, err := h.seriesStore.CountSeries(r.Context())
+	if err != nil {
+		writeError(w, "failed to read graph stats", http.StatusInternalServerError)
+		return
+	}
+	subjectCount, err := h.subjectStore.CountSubjects(r.Context())
+	if err != nil {
+		writeError(w, "failed to read graph stats", http.StatusInternalServerError)
+		return
+	}
+	relByType, err := h.workRelStore.CountRelationshipsByType(r.Context())
+	if err != nil {
+		writeError(w, "failed to read graph stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, GraphStatsResponse{
+		SeriesCount:             seriesCount,
+		SubjectsCount:           subjectCount,
+		RelationshipCountByType: relByType,
+	})
+}
+
+func (h *Handlers) GetWorkRecommendations(w http.ResponseWriter, r *http.Request) {
+	if h.recommender == nil {
+		writeError(w, "recommendation engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+	workID := strings.TrimSpace(mux.Vars(r)["id"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+
+	limit := 20
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeError(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		if parsed > 100 {
+			parsed = 100
+		}
+		limit = parsed
+	}
+
+	req := recommend.RecommendationRequest{
+		SeedWorkIDs:  []string{workID},
+		Limit:        limit,
+		IncludeTypes: splitCSVParam(r.URL.Query().Get("include")),
+		Preferences: recommend.RecommendationPreferences{
+			Formats:   splitCSVParam(r.URL.Query().Get("formats")),
+			Languages: splitCSVParam(r.URL.Query().Get("languages")),
+		},
+	}
+
+	results, err := h.recommender.Recommend(r.Context(), req)
+	if err != nil {
+		log.Error().Err(err).Str("work_id", workID).Msg("work recommendations failed")
+		writeError(w, "failed to compute recommendations", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, RecommendationsResponse{SeedWorkID: workID, Recommendations: results})
+}
+
+func (h *Handlers) GetNextInSeries(w http.ResponseWriter, r *http.Request) {
+	if h.recommender == nil {
+		writeError(w, "recommendation engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+	workID := strings.TrimSpace(mux.Vars(r)["id"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+
+	next, err := h.recommender.RecommendNextInSeries(r.Context(), workID)
+	if err != nil {
+		log.Error().Err(err).Str("work_id", workID).Msg("next-in-series lookup failed")
+		writeError(w, "failed to compute next in series", http.StatusInternalServerError)
+		return
+	}
+	if next == nil {
+		writeError(w, "next in series not found", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, NextRecommendationResponse{SeedWorkID: workID, Next: next})
+}
+
+func (h *Handlers) GetSimilarWorks(w http.ResponseWriter, r *http.Request) {
+	if h.recommender == nil {
+		writeError(w, "recommendation engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+	workID := strings.TrimSpace(mux.Vars(r)["id"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+
+	limit := 20
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeError(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		if parsed > 100 {
+			parsed = 100
+		}
+		limit = parsed
+	}
+
+	results, err := h.recommender.RecommendSimilar(r.Context(), workID, limit, recommend.RecommendationPreferences{
+		Formats:   splitCSVParam(r.URL.Query().Get("formats")),
+		Languages: splitCSVParam(r.URL.Query().Get("languages")),
+	})
+	if err != nil {
+		log.Error().Err(err).Str("work_id", workID).Msg("similar works lookup failed")
+		writeError(w, "failed to compute similar works", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, RecommendationsResponse{SeedWorkID: workID, Recommendations: results})
 }
 
 // --- Provider management endpoints ---

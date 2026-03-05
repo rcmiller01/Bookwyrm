@@ -131,6 +131,7 @@ func (h *AuthorExpandHandler) Handle(ctx context.Context, job model.EnrichmentJo
 	})
 
 	enqueued := 0
+	graphEnqueued := 0
 	for _, work := range discovered {
 		if enqueued >= h.maxJobsPerExpand {
 			break
@@ -143,6 +144,18 @@ func (h *AuthorExpandHandler) Handle(ctx context.Context, job model.EnrichmentJo
 		})
 		if err == nil {
 			enqueued++
+		}
+
+		if graphEnqueued < h.maxJobsPerExpand {
+			_, graphErr := h.jobStore.EnqueueJob(ctx, model.EnrichmentJob{
+				JobType:    model.EnrichmentJobTypeGraphUpdate,
+				EntityType: "work",
+				EntityID:   work.ID,
+				Priority:   52,
+			})
+			if graphErr == nil {
+				graphEnqueued++
+			}
 		}
 	}
 

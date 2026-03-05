@@ -19,6 +19,7 @@ const (
 const (
 	EnrichmentJobTypeWorkEditions = "work_editions"
 	EnrichmentJobTypeAuthorExpand = "author_expand"
+	EnrichmentJobTypeGraphUpdate  = "graph_update_work"
 )
 
 // EnrichmentJob represents a queued or executed enrichment task.

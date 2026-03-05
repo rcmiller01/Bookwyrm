@@ -217,6 +217,7 @@ func (r *defaultResolver) persistWork(ctx context.Context, w model.Work) error {
 			_ = r.ids.InsertIdentifier(ctx, e.ID, id)
 		}
 	}
+	r.scheduleGraphUpdate(ctx, w.ID)
 	return nil
 }
 
@@ -370,6 +371,26 @@ func (r *defaultResolver) scheduleIdentifierEnrichment(ctx context.Context, edit
 			EntityType: "work",
 			EntityID:   edition.WorkID,
 			Priority:   50,
+		})
+		_, _ = r.enrichment.EnqueueJob(ctx, model.EnrichmentJob{
+			JobType:    model.EnrichmentJobTypeGraphUpdate,
+			EntityType: "work",
+			EntityID:   edition.WorkID,
+			Priority:   52,
+		})
+	}()
+}
+
+func (r *defaultResolver) scheduleGraphUpdate(ctx context.Context, workID string) {
+	if r.enrichment == nil || workID == "" {
+		return
+	}
+	go func() {
+		_, _ = r.enrichment.EnqueueJob(ctx, model.EnrichmentJob{
+			JobType:    model.EnrichmentJobTypeGraphUpdate,
+			EntityType: "work",
+			EntityID:   workID,
+			Priority:   52,
 		})
 	}()
 }

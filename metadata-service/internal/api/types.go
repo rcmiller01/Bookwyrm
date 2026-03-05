@@ -2,6 +2,7 @@ package api
 
 import (
 	"metadata-service/internal/model"
+	"metadata-service/internal/recommend"
 	"metadata-service/internal/store"
 	"time"
 )
@@ -84,6 +85,48 @@ type EnrichmentStatsResponse struct {
 	WorkerCount    int              `json:"worker_count"`
 	QueueDepth     map[string]int64 `json:"queue_depth"`
 	NextRunnableAt *time.Time       `json:"next_runnable_at"`
+}
+
+type RelatedWork struct {
+	RelationshipType string     `json:"relationship_type"`
+	Confidence       float64    `json:"confidence"`
+	Provider         *string    `json:"provider,omitempty"`
+	Work             model.Work `json:"work"`
+}
+
+type WorkGraphResponse struct {
+	WorkID      string              `json:"work_id"`
+	Series      *model.Series       `json:"series,omitempty"`
+	SeriesItems []model.SeriesEntry `json:"series_items,omitempty"`
+	Subjects    []model.Subject     `json:"subjects,omitempty"`
+	Related     []RelatedWork       `json:"related,omitempty"`
+}
+
+type SeriesResponse struct {
+	Series  model.Series        `json:"series"`
+	Entries []model.SeriesEntry `json:"entries"`
+	Works   []model.Work        `json:"works"`
+}
+
+type SubjectWorksResponse struct {
+	Subject model.Subject `json:"subject"`
+	Works   []model.Work  `json:"works"`
+}
+
+type GraphStatsResponse struct {
+	SeriesCount             int64            `json:"series_count"`
+	SubjectsCount           int64            `json:"subjects_count"`
+	RelationshipCountByType map[string]int64 `json:"relationship_count_by_type"`
+}
+
+type RecommendationsResponse struct {
+	SeedWorkID      string                           `json:"seed_work_id"`
+	Recommendations []recommend.RecommendationResult `json:"recommendations"`
+}
+
+type NextRecommendationResponse struct {
+	SeedWorkID string                          `json:"seed_work_id"`
+	Next       *recommend.RecommendationResult `json:"next,omitempty"`
 }
 
 // Reliability types

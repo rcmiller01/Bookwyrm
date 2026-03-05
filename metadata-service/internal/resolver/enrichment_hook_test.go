@@ -228,14 +228,20 @@ func TestResolveIdentifier_Success_EnqueuesWorkEditions(t *testing.T) {
 		t.Fatalf("expected resolved edition with work id, got %+v", edition)
 	}
 
-	es.waitForAttempts(t, 1, 2*time.Second)
+	es.waitForAttempts(t, 2, 2*time.Second)
 	es.mu.Lock()
 	defer es.mu.Unlock()
-	if len(es.enqueued) != 1 {
-		t.Fatalf("expected one enqueue after identifier resolve, got %d", len(es.enqueued))
+	if len(es.enqueued) != 2 {
+		t.Fatalf("expected two enqueues after identifier resolve, got %d", len(es.enqueued))
 	}
-	job := es.enqueued[0]
-	if job.JobType != model.EnrichmentJobTypeWorkEditions || job.EntityID != "w-resolved" || job.Priority != 50 {
-		t.Fatalf("unexpected scheduled enrichment job: %+v", job)
+	seen := map[string]bool{}
+	for _, job := range es.enqueued {
+		if job.EntityID != "w-resolved" || job.EntityType != "work" {
+			t.Fatalf("unexpected scheduled enrichment job payload: %+v", job)
+		}
+		seen[job.JobType] = true
+	}
+	if !seen[model.EnrichmentJobTypeWorkEditions] || !seen[model.EnrichmentJobTypeGraphUpdate] {
+		t.Fatalf("expected both work_editions and graph_update_work jobs, got %+v", es.enqueued)
 	}
 }

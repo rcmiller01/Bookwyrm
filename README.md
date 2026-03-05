@@ -24,3 +24,24 @@ providers:
 ```
 
 If both shapes are present, `dispatch_policy.quarantine_mode` takes precedence.
+
+## Recommendation Engine (Phase 7)
+
+Recommendation APIs are available for graph-based discovery:
+
+- `GET /v1/work/{id}/recommendations`
+- `GET /v1/work/{id}/next`
+- `GET /v1/work/{id}/similar`
+
+Supported query parameters:
+
+- `limit` (bounded to 100)
+- `include` (comma-separated: `series`, `author`, `subjects`, `relationships`)
+- `formats` (comma-separated preference values)
+- `languages` (comma-separated preference values)
+
+Runtime behavior:
+
+- Results are deterministic (`score DESC`, then `work_id ASC`).
+- Responses include explainability through `reasons`.
+- Recommendation caching and scoring defaults are controlled via the `recommendation` config block in `configs/config.yaml` (or defaults in code when omitted).

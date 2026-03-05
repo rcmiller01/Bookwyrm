@@ -37,32 +37,32 @@ This phase must:
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Extend canonical work model with optional graph fields (`SeriesName`, `SeriesIndex`, `Subjects`) | [ ] |
-| 2 | Add normalization helpers (`NormalizeSubject`, `NormalizeSeriesName`) in shared module | [ ] |
-| 3 | Create migration `000005_metadata_graph.up.sql` | [ ] |
-| 4 | Create migration `000005_metadata_graph.down.sql` | [ ] |
-| 5 | Implement series store (`internal/store/series.go`) | [ ] |
-| 6 | Implement subject store (`internal/store/subjects.go`) | [ ] |
-| 7 | Implement work relationship store (`internal/store/work_relationships.go`) | [ ] |
-| 8 | Implement graph builder core (`internal/graph/builder.go`) | [ ] |
-| 9 | Enforce deterministic graph update algorithm (`UpdateGraphForWork`) | [ ] |
-| 10 | Enforce fanout caps (author/series/subject) in builder | [ ] |
-| 11 | Implement relationship provenance + confidence rules | [ ] |
-| 12 | Add enrichment job type constant `graph_update_work` | [ ] |
-| 13 | Add enrichment handler `internal/enrichment/handlers/graph_update_work.go` | [ ] |
-| 14 | Wire enqueue from resolver ingest path (deduped) | [ ] |
-| 15 | Wire enqueue from `author_expand` for newly ingested works (bounded) | [ ] |
-| 16 | Add API endpoint `GET /v1/work/{id}/graph` | [ ] |
-| 17 | Add API endpoint `GET /v1/series/{id}` | [ ] |
-| 18 | Add API endpoint `GET /v1/subjects/{id}/works?limit=50` | [ ] |
-| 19 | Add API endpoint `GET /v1/graph/stats` | [ ] |
-| 20 | Add graph metrics in `internal/metrics` | [ ] |
-| 21 | Add structured logging in `graph_update_work` handler | [ ] |
-| 22 | Add store tests (series/subjects/relationships) | [ ] |
-| 23 | Add graph builder tests (caps, idempotency, deterministic edges) | [ ] |
-| 24 | Add enrichment handler tests for `graph_update_work` | [ ] |
-| 25 | Add API contract tests for graph endpoints | [ ] |
-| 26 | Validate full suite `go test ./... -count=1` | [ ] |
+| 1 | Extend canonical work model with optional graph fields (`SeriesName`, `SeriesIndex`, `Subjects`) | [x] |
+| 2 | Add normalization helpers (`NormalizeSubject`, `NormalizeSeriesName`) in shared module | [x] |
+| 3 | Create migration `000005_metadata_graph.up.sql` | [x] |
+| 4 | Create migration `000005_metadata_graph.down.sql` | [x] |
+| 5 | Implement series store (`internal/store/series.go`) | [x] |
+| 6 | Implement subject store (`internal/store/subjects.go`) | [x] |
+| 7 | Implement work relationship store (`internal/store/work_relationships.go`) | [x] |
+| 8 | Implement graph builder core (`internal/graph/builder.go`) | [x] |
+| 9 | Enforce deterministic graph update algorithm (`UpdateGraphForWork`) | [x] |
+| 10 | Enforce fanout caps (author/series/subject) in builder | [x] |
+| 11 | Implement relationship provenance + confidence rules | [x] |
+| 12 | Add enrichment job type constant `graph_update_work` | [x] |
+| 13 | Add enrichment handler `internal/enrichment/handlers/graph_update_work.go` | [x] |
+| 14 | Wire enqueue from resolver ingest path (deduped) | [x] |
+| 15 | Wire enqueue from `author_expand` for newly ingested works (bounded) | [x] |
+| 16 | Add API endpoint `GET /v1/work/{id}/graph` | [x] |
+| 17 | Add API endpoint `GET /v1/series/{id}` | [x] |
+| 18 | Add API endpoint `GET /v1/subjects/{id}/works?limit=50` | [x] |
+| 19 | Add API endpoint `GET /v1/graph/stats` | [x] |
+| 20 | Add graph metrics in `internal/metrics` | [x] |
+| 21 | Add structured logging in `graph_update_work` handler | [x] |
+| 22 | Add store tests (series/subjects/relationships) | [x] |
+| 23 | Add graph builder tests (caps, idempotency, deterministic edges) | [x] |
+| 24 | Add enrichment handler tests for `graph_update_work` | [x] |
+| 25 | Add API contract tests for graph endpoints | [x] |
+| 26 | Validate full suite `go test ./... -count=1` | [x] |
 
 ---
 

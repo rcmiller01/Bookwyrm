@@ -153,11 +153,21 @@ func TestAuthorExpandHandler_RespectsLimitsAndEnqueueCap(t *testing.T) {
 	if len(works.inserted) != 2 {
 		t.Fatalf("expected max_author_works to cap inserts at 2, got %d", len(works.inserted))
 	}
-	if len(jobs.enqueued) != 1 {
-		t.Fatalf("expected max_jobs_per_expand to cap enqueues at 1, got %d", len(jobs.enqueued))
+	var workEditionsCount int
+	var graphUpdateCount int
+	for _, enqueued := range jobs.enqueued {
+		switch enqueued.JobType {
+		case model.EnrichmentJobTypeWorkEditions:
+			workEditionsCount++
+		case model.EnrichmentJobTypeGraphUpdate:
+			graphUpdateCount++
+		}
 	}
-	if jobs.enqueued[0].JobType != model.EnrichmentJobTypeWorkEditions || jobs.enqueued[0].EntityType != "work" {
-		t.Fatalf("expected follow-up work_editions enqueue, got %+v", jobs.enqueued[0])
+	if workEditionsCount != 1 {
+		t.Fatalf("expected max_jobs_per_expand to cap work_editions enqueues at 1, got %d", workEditionsCount)
+	}
+	if graphUpdateCount != 1 {
+		t.Fatalf("expected bounded graph_update_work enqueue for ingested work, got %d", graphUpdateCount)
 	}
 }
 

@@ -17,10 +17,12 @@ import (
 	"metadata-service/internal/config"
 	"metadata-service/internal/enrichment"
 	"metadata-service/internal/enrichment/handlers"
+	"metadata-service/internal/graph"
 	"metadata-service/internal/provider"
 	"metadata-service/internal/provider/googlebooks"
 	"metadata-service/internal/provider/hardcover"
 	"metadata-service/internal/provider/openlibrary"
+	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
 )
@@ -56,6 +58,10 @@ func main() {
 	providerMetricsStore := store.NewProviderMetricsStore(pool)
 	reliabilityStore := store.NewReliabilityStore(pool)
 	enrichmentStore := store.NewEnrichmentJobStore(pool)
+	seriesStore := store.NewSeriesStore(pool)
+	subjectStore := store.NewSubjectStore(pool)
+	workRelStore := store.NewWorkRelationshipStore(pool)
+	recommendReadStore := store.NewRecommendReadStore(pool)
 
 	stores := resolver.Stores{
 		Works:       store.NewWorkStore(pool),
@@ -163,6 +169,26 @@ func main() {
 
 	// resolver
 	res := resolver.New(registry, rl, stores, c)
+	graphBuilder := graph.NewBuilder(pool, stores.Works, seriesStore, subjectStore, workRelStore)
+	recommendOptions := recommend.Options{
+		Weights: recommend.ScoringWeights{
+			SeriesNeighbor:  cfg.Recommendation.Weights.SeriesNeighbor,
+			SameSeries:      cfg.Recommendation.Weights.SameSeries,
+			SameAuthor:      cfg.Recommendation.Weights.SameAuthor,
+			SharedSubject:   cfg.Recommendation.Weights.SharedSubject,
+			ExplicitRelated: cfg.Recommendation.Weights.ExplicitRelated,
+			PreferenceBoost: cfg.Recommendation.Weights.PreferenceBoost,
+		},
+		MaxDepth:           cfg.Recommendation.MaxDepth,
+		MaxCandidatePool:   cfg.Recommendation.MaxCandidatePool,
+		SeriesLimit:        cfg.Recommendation.SeriesLimit,
+		AuthorLimit:        cfg.Recommendation.AuthorLimit,
+		MaxSubjects:        cfg.Recommendation.MaxSubjects,
+		MaxWorksPerSubject: cfg.Recommendation.MaxWorksPerSubject,
+		RelationshipLimit:  cfg.Recommendation.RelationshipLimit,
+		CacheTTL:           time.Duration(cfg.Recommendation.CacheTTLHours) * time.Hour,
+	}
+	recommendEngine := recommend.NewEngine(recommendReadStore, c, recommendOptions)
 
 	// health monitor
 	if cfg.HealthMonitor.Enabled {
@@ -178,6 +204,7 @@ func main() {
 	// reliability worker — recomputes scores every 5 minutes
 	reliabilityWorker := provider.NewReliabilityWorker(providerMetricsStore, reliabilityStore, registry, 5*time.Minute)
 	go reliabilityWorker.Start(ctx)
+	go graph.StartMetricsUpdater(ctx, seriesStore, subjectStore, workRelStore, 45*time.Second)
 
 	if cfg.Enrichment.Enabled {
 		handlerRegistry := handlers.NewRegistry()
@@ -200,6 +227,7 @@ func main() {
 			cfg.Enrichment.Limits.MaxAuthorWorks,
 			cfg.Enrichment.MaxJobsPerRequest,
 		))
+		handlerRegistry.Register(handlers.NewGraphUpdateWorkHandler(graphBuilder))
 
 		enrichmentEngine := enrichment.NewEngine(cfg.Enrichment.WorkerCount, enrichmentStore, handlerRegistry)
 		go enrichmentEngine.Start(ctx)
@@ -209,12 +237,17 @@ func main() {
 	// API
 	handlers := api.NewHandlers(
 		res,
+		recommendEngine,
 		registry,
 		rl,
 		providerCfgStore,
 		providerStatusStore,
 		reliabilityStore,
 		enrichmentStore,
+		stores.Works,
+		seriesStore,
+		subjectStore,
+		workRelStore,
 		cfg.Enrichment.Enabled,
 		cfg.Enrichment.WorkerCount,
 		cfg.ProviderDispatchPolicy.Source,
