@@ -6,6 +6,63 @@ import (
 	"testing"
 )
 
+func TestLoad_APIPlatformDefaultsAndEnvOverrides(t *testing.T) {
+	t.Setenv("API_AUTH_ENABLED", "true")
+	t.Setenv("API_AUTH_KEYS", "alpha,beta")
+	t.Setenv("API_RATE_LIMIT_ENABLED", "true")
+	t.Setenv("API_RATE_LIMIT_RPM", "240")
+	t.Setenv("API_RATE_LIMIT_BURST", "30")
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	content := `
+server:
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  user: metadata
+  password: metadata
+  dbname: metadata
+
+providers:
+  openlibrary:
+    enabled: true
+    timeout_seconds: 10
+    rate_limit: 100
+    priority: 100
+
+health_monitor:
+  enabled: true
+  interval_minutes: 5
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if !cfg.API.Auth.Enabled {
+		t.Fatalf("expected API auth to be enabled via env")
+	}
+	if len(cfg.API.Auth.Keys) != 2 {
+		t.Fatalf("expected 2 API auth keys, got %d", len(cfg.API.Auth.Keys))
+	}
+	if !cfg.API.RateLimit.Enabled {
+		t.Fatalf("expected API rate limit enabled via env")
+	}
+	if cfg.API.RateLimit.RequestsPerMinute != 240 {
+		t.Fatalf("expected rpm 240, got %d", cfg.API.RateLimit.RequestsPerMinute)
+	}
+	if cfg.API.RateLimit.Burst != 30 {
+		t.Fatalf("expected burst 30, got %d", cfg.API.RateLimit.Burst)
+	}
+}
+
 func TestLoad_DispatchPolicy_ExtractedFromProviders(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.yaml")

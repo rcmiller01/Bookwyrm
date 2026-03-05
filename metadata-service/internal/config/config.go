@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -11,6 +12,8 @@ type Config struct {
 	Server struct {
 		Port int `yaml:"port"`
 	} `yaml:"server"`
+
+	API APIConfig `yaml:"api"`
 
 	Database struct {
 		Host     string `yaml:"host"`
@@ -31,6 +34,19 @@ type Config struct {
 
 	Enrichment     EnrichmentConfig     `yaml:"enrichment"`
 	Recommendation RecommendationConfig `yaml:"recommendation"`
+}
+
+type APIConfig struct {
+	Auth struct {
+		Enabled bool     `yaml:"enabled"`
+		Keys    []string `yaml:"keys"`
+	} `yaml:"auth"`
+
+	RateLimit struct {
+		Enabled           bool `yaml:"enabled"`
+		RequestsPerMinute int  `yaml:"requests_per_minute"`
+		Burst             int  `yaml:"burst"`
+	} `yaml:"rate_limit"`
 }
 
 type ProviderConfig struct {
@@ -160,6 +176,13 @@ func Load(path string) (*Config, error) {
 		cfg.Recommendation.Weights.PreferenceBoost = 0.05
 	}
 
+	if cfg.API.RateLimit.RequestsPerMinute <= 0 {
+		cfg.API.RateLimit.RequestsPerMinute = 120
+	}
+	if cfg.API.RateLimit.Burst <= 0 {
+		cfg.API.RateLimit.Burst = 20
+	}
+
 	hasDispatchPolicy := false
 	if pc, ok := cfg.Providers["dispatch_policy"]; ok {
 		hasDispatchPolicy = true
@@ -205,6 +228,25 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("DATABASE_NAME"); v != "" {
 		cfg.Database.DBName = v
 	}
+	if v := strings.TrimSpace(os.Getenv("API_AUTH_ENABLED")); v != "" {
+		cfg.API.Auth.Enabled = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+	}
+	if v := strings.TrimSpace(os.Getenv("API_AUTH_KEYS")); v != "" {
+		cfg.API.Auth.Keys = splitCSV(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("API_RATE_LIMIT_ENABLED")); v != "" {
+		cfg.API.RateLimit.Enabled = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+	}
+	if v := strings.TrimSpace(os.Getenv("API_RATE_LIMIT_RPM")); v != "" {
+		if parsed := parsePositiveInt(v); parsed > 0 {
+			cfg.API.RateLimit.RequestsPerMinute = parsed
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("API_RATE_LIMIT_BURST")); v != "" {
+		if parsed := parsePositiveInt(v); parsed > 0 {
+			cfg.API.RateLimit.Burst = parsed
+		}
+	}
 	// API key overrides via environment (e.g. PROVIDER_GOOGLEBOOKS_API_KEY)
 	for name, pc := range cfg.Providers {
 		envKey := "PROVIDER_" + strings.ToUpper(name) + "_API_KEY"
@@ -215,4 +257,25 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func parsePositiveInt(value string) int {
+	var parsed int
+	_, _ = fmt.Sscanf(value, "%d", &parsed)
+	if parsed > 0 {
+		return parsed
+	}
+	return 0
 }

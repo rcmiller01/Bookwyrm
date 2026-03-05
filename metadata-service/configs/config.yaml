@@ -1,6 +1,15 @@
 server:
   port: 8080
 
+api:
+  auth:
+    enabled: false
+    keys: []
+  rate_limit:
+    enabled: true
+    requests_per_minute: 120
+    burst: 20
+
 database:
   host: localhost
   port: 5432

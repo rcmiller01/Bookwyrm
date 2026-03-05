@@ -7,10 +7,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func NewRouter(h *Handlers) http.Handler {
+func NewRouter(h *Handlers, opts ...RouterOptions) http.Handler {
 	r := mux.NewRouter()
+	routerOpts := RouterOptions{}
+	if len(opts) > 0 {
+		routerOpts = opts[0]
+	}
 
 	v1 := r.PathPrefix("/v1").Subrouter()
+	v1.Use(apiVersionMiddleware("v1"))
+	v1.Use(authMiddleware(routerOpts.AuthEnabled, routerOpts.APIKeys))
+	v1.Use(rateLimitMiddleware(routerOpts.RateLimitEnabled, newAPIRateLimiter(routerOpts.RateLimitPerMinute, routerOpts.RateLimitBurst)))
 
 	// Metadata endpoints
 	v1.HandleFunc("/search", h.Search).Methods(http.MethodGet)

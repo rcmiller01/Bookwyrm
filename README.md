@@ -86,3 +86,41 @@ Repair behavior:
 - Reorders malformed series entry indexes into deterministic sequence order
 - Normalizes `works.first_pub_year` to the minimum known edition publication year for conflicted works
 - Optionally removes invalid ISBN identifiers (`remove_invalid_identifiers`, default true)
+
+## Metadata Service Platform (Phase 10)
+
+The public `v1` API is now treated as a stable integration surface.
+
+Platform features:
+
+- Stable API version header on all `v1` responses: `X-Bookwyrm-API-Version: v1`
+- Optional API authentication via `X-API-Key` or `Authorization: Bearer <key>`
+- Configurable API rate limiting with standard headers
+- Starter client SDKs for Go and Python
+- Public API contract documentation
+
+Configuration (`configs/config.yaml`):
+
+```yaml
+api:
+	auth:
+		enabled: false
+		keys: []
+	rate_limit:
+		enabled: true
+		requests_per_minute: 120
+		burst: 20
+```
+
+Environment overrides:
+
+- `API_AUTH_ENABLED`
+- `API_AUTH_KEYS` (comma-separated)
+- `API_RATE_LIMIT_ENABLED`
+- `API_RATE_LIMIT_RPM`
+- `API_RATE_LIMIT_BURST`
+
+Additional docs and SDKs:
+
+- `metadata-service/docs/api_v1.md`
+- `metadata-service/sdk/README.md`

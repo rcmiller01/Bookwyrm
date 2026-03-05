@@ -266,7 +266,13 @@ func main() {
 		cfg.ProviderDispatchPolicy.Source,
 		cfg.ProviderDispatchPolicy.QuarantineMode,
 	)
-	router := api.NewRouter(handlers)
+	router := api.NewRouter(handlers, api.RouterOptions{
+		AuthEnabled:        cfg.API.Auth.Enabled,
+		APIKeys:            cfg.API.Auth.Keys,
+		RateLimitEnabled:   cfg.API.RateLimit.Enabled,
+		RateLimitPerMinute: cfg.API.RateLimit.RequestsPerMinute,
+		RateLimitBurst:     cfg.API.RateLimit.Burst,
+	})
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
