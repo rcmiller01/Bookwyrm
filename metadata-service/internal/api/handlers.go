@@ -506,8 +506,12 @@ func (h *Handlers) TestProvider(w http.ResponseWriter, r *http.Request) {
 
 // GetProviderPolicy handles GET /v1/providers/policy.
 func (h *Handlers) GetProviderPolicy(w http.ResponseWriter, _ *http.Request) {
+	quarantineDisabled := false
+	if h.registry != nil {
+		quarantineDisabled = h.registry.QuarantineDisables()
+	}
 	writeJSON(w, ProviderPolicyResponse{
-		QuarantineDisableDispatch: h.registry.QuarantineDisables(),
+		QuarantineDisableDispatch: quarantineDisabled,
 		Source:                    h.policySource,
 		Mode:                      h.policyMode,
 	})

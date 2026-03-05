@@ -56,8 +56,9 @@ func (s *Service) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 	}
 
 	type resultItem struct {
-		result SearchResult
-		err    error
+		adapter string
+		result  SearchResult
+		err     error
 	}
 	outCh := make(chan resultItem, len(groups)*2)
 	var wg sync.WaitGroup
@@ -75,7 +76,7 @@ func (s *Service) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 				if err == nil {
 					res.Source = g + ":" + ad.Name()
 				}
-				outCh <- resultItem{result: res, err: err}
+				outCh <- resultItem{adapter: ad.Name(), result: res, err: err}
 			}(group, adapter)
 		}
 	}
@@ -100,7 +101,7 @@ func (s *Service) Search(ctx context.Context, req SearchRequest) (SearchResult, 
 
 	for item := range outCh {
 		if item.err != nil {
-			merged.Trace = append(merged.Trace, AdapterTrace{Adapter: "unknown", Status: "error", Error: item.err.Error()})
+			merged.Trace = append(merged.Trace, AdapterTrace{Adapter: item.adapter, Status: "error", Error: item.err.Error()})
 			continue
 		}
 		merged.Candidates = append(merged.Candidates, item.result.Candidates...)

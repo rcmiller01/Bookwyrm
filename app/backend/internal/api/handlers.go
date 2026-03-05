@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"app-backend/internal/domain"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
+	"app-backend/internal/jobs"
 	"app-backend/internal/store"
 
 	"github.com/gorilla/mux"
@@ -20,10 +22,15 @@ type Handlers struct {
 	metaClient     *metadata.Client
 	indexerClient  *indexer.Client
 	watchlistStore store.WatchlistStore
+	jobService     *jobs.Service
 }
 
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
 	return &Handlers{metaClient: metaClient, indexerClient: indexerClient, watchlistStore: watchlistStore}
+}
+
+func (h *Handlers) SetJobService(jobService *jobs.Service) {
+	h.jobService = jobService
 }
 
 func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
@@ -215,6 +222,119 @@ func (h *Handlers) DeleteWatchlist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) ListJobs(w http.ResponseWriter, r *http.Request) {
+	if h.jobService == nil {
+		writeError(w, "job service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	jobs := h.jobService.List(domain.JobFilter{
+		Type:  domain.JobType(strings.TrimSpace(r.URL.Query().Get("type"))),
+		State: domain.JobState(strings.TrimSpace(r.URL.Query().Get("state"))),
+		Limit: limit,
+	})
+	writeJSON(w, map[string]any{"items": jobs})
+}
+
+func (h *Handlers) GetJob(w http.ResponseWriter, r *http.Request) {
+	if h.jobService == nil {
+		writeError(w, "job service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if id == "" {
+		writeError(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+	job, err := h.jobService.Get(id)
+	if err != nil {
+		if err == store.ErrJobNotFound {
+			writeError(w, "job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to read job", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, job)
+}
+
+func (h *Handlers) EnqueueJob(w http.ResponseWriter, r *http.Request) {
+	if h.jobService == nil {
+		writeError(w, "job service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Type        domain.JobType `json:"type"`
+		Payload     map[string]any `json:"payload"`
+		RunAt       *time.Time     `json:"run_at,omitempty"`
+		MaxAttempts int            `json:"max_attempts,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Type == "" {
+		writeError(w, "type is required", http.StatusBadRequest)
+		return
+	}
+	runAt := time.Now().UTC()
+	if req.RunAt != nil {
+		runAt = req.RunAt.UTC()
+	}
+	job := h.jobService.Enqueue(req.Type, req.Payload, runAt, req.MaxAttempts)
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, job)
+}
+
+func (h *Handlers) RetryJob(w http.ResponseWriter, r *http.Request) {
+	if h.jobService == nil {
+		writeError(w, "job service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	job, err := h.jobService.Retry(id)
+	if err != nil {
+		if err == store.ErrJobNotFound {
+			writeError(w, "job not found", http.StatusNotFound)
+			return
+		}
+		if err == store.ErrJobNotRunnable {
+			writeError(w, "job not retryable", http.StatusConflict)
+			return
+		}
+		writeError(w, "failed to retry job", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, job)
+}
+
+func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
+	if h.jobService == nil {
+		writeError(w, "job service not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	job, err := h.jobService.Cancel(id)
+	if err != nil {
+		if err == store.ErrJobNotFound {
+			writeError(w, "job not found", http.StatusNotFound)
+			return
+		}
+		if err == store.ErrJobNotRunnable {
+			writeError(w, "job not cancelable", http.StatusConflict)
+			return
+		}
+		writeError(w, "failed to cancel job", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, job)
 }
 
 func userIDFromRequest(r *http.Request) string {

@@ -56,6 +56,7 @@ type ProviderConfig struct {
 	Priority        int    `yaml:"priority"`
 	APIKey          string `yaml:"api_key"`
 	BaseURL         string `yaml:"base_url"`
+	MailTo          string `yaml:"mailto"`
 	QuarantineMode  string `yaml:"quarantine_mode"`
 	DisableDispatch bool   `yaml:"disable_dispatch"`
 }
@@ -252,8 +253,16 @@ func Load(path string) (*Config, error) {
 		envKey := "PROVIDER_" + strings.ToUpper(name) + "_API_KEY"
 		if v := os.Getenv(envKey); v != "" {
 			pc.APIKey = v
-			cfg.Providers[name] = pc
 		}
+		envMailTo := "PROVIDER_" + strings.ToUpper(name) + "_MAILTO"
+		if v := strings.TrimSpace(os.Getenv(envMailTo)); v != "" {
+			pc.MailTo = v
+		}
+		envBaseURL := "PROVIDER_" + strings.ToUpper(name) + "_BASE_URL"
+		if v := strings.TrimSpace(os.Getenv(envBaseURL)); v != "" {
+			pc.BaseURL = v
+		}
+		cfg.Providers[name] = pc
 	}
 
 	return &cfg, nil

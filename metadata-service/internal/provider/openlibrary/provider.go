@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"metadata-service/internal/model"
+	"metadata-service/internal/provider"
 )
 
 const baseURL = "https://openlibrary.org"
@@ -29,6 +30,17 @@ func New(timeoutSeconds int) *Provider {
 
 func (p *Provider) Name() string {
 	return "openlibrary"
+}
+
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsSearch:       true,
+		SupportsISBN:         true,
+		SupportsDOI:          false,
+		SupportsSeries:       false,
+		SupportsSubjects:     false,
+		SupportsAuthorSearch: true,
+	}
 }
 
 // --- Search ---

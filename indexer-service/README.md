@@ -28,3 +28,12 @@ cd indexer-service
 go mod tidy
 go run ./cmd/server
 ```
+
+## Prowlarr Integration
+
+By default, a mock `prowlarr` adapter is used for local development.
+
+Set these env vars to enable live Prowlarr integration:
+
+- `PROWLARR_BASE_URL` (e.g. `http://localhost:9696`)
+- `PROWLARR_API_KEY`

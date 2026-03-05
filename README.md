@@ -124,3 +124,19 @@ Additional docs and SDKs:
 
 - `metadata-service/docs/api_v1.md`
 - `metadata-service/sdk/README.md`
+
+## Provider Expansion (Phase 10.1)
+
+Additional metadata providers are supported:
+
+- `crossref` (DOI-first scholarly metadata)
+- `googlebooks` (broader catalog metadata)
+- `hardcover` (series and subject-rich metadata)
+
+Configuration (`metadata-service/configs/config.yaml`) keeps these disabled by default.
+
+Environment overrides for secrets/identity:
+
+- `PROVIDER_GOOGLEBOOKS_API_KEY`
+- `PROVIDER_HARDCOVER_API_KEY`
+- `PROVIDER_CROSSREF_MAILTO`

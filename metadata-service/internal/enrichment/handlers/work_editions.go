@@ -70,6 +70,9 @@ func (h *WorkEditionsHandler) Handle(ctx context.Context, job model.EnrichmentJo
 		if inserted >= h.maxWorkEditions {
 			break
 		}
+		if !provider.CapabilitiesFor(p).SupportsSearch {
+			continue
+		}
 		if h.rateLimiter != nil && !h.rateLimiter.Allow(p.Name()) {
 			continue
 		}

@@ -28,16 +28,23 @@ providers:
     priority: 100
   googlebooks:
     enabled: false
-    timeout_seconds: 10
-    rate_limit: 100
+    timeout_seconds: 6
+    rate_limit: 8
     priority: 200
     api_key: ""
   hardcover:
     enabled: false
-    timeout_seconds: 15
-    rate_limit: 60
+    timeout_seconds: 10
+    rate_limit: 2
     priority: 300
     api_key: ""
+  crossref:
+    enabled: false
+    timeout_seconds: 6
+    rate_limit: 3
+    priority: 350
+    mailto: ""
+    base_url: "https://api.crossref.org"
   annasarchive:
     enabled: false
     timeout_seconds: 15

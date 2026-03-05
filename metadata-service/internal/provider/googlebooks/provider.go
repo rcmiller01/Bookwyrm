@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"metadata-service/internal/model"
+	"metadata-service/internal/normalize"
+	"metadata-service/internal/provider"
 )
 
 const baseURL = "https://www.googleapis.com/books/v1"
@@ -28,6 +31,17 @@ func New(timeoutSeconds int, apiKey string) *Provider {
 
 func (p *Provider) Name() string { return "googlebooks" }
 
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsSearch:       true,
+		SupportsISBN:         true,
+		SupportsDOI:          false,
+		SupportsSeries:       false,
+		SupportsSubjects:     true,
+		SupportsAuthorSearch: true,
+	}
+}
+
 // --- internal response types ---
 
 type volumesResponse struct {
@@ -44,6 +58,7 @@ type volumeInfo struct {
 	Authors             []string `json:"authors"`
 	Publisher           string   `json:"publisher"`
 	PublishedDate       string   `json:"publishedDate"`
+	Categories          []string `json:"categories"`
 	IndustryIdentifiers []struct {
 		Type       string `json:"type"`
 		Identifier string `json:"identifier"`
@@ -79,6 +94,21 @@ func mapItem(item volumeItem) model.Work {
 		ID:           "wrk_" + uuid.NewString(),
 		Title:        vi.Title,
 		FirstPubYear: pubYear(vi.PublishedDate),
+	}
+	subjectSeen := map[string]struct{}{}
+	for _, category := range vi.Categories {
+		normalized := normalize.NormalizeSubject(category)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := subjectSeen[normalized]; ok {
+			continue
+		}
+		subjectSeen[normalized] = struct{}{}
+		w.Subjects = append(w.Subjects, strings.TrimSpace(category))
+		if len(w.Subjects) >= 25 {
+			break
+		}
 	}
 	for _, name := range vi.Authors {
 		w.Authors = append(w.Authors, model.Author{ID: "ath_" + uuid.NewString(), Name: name})

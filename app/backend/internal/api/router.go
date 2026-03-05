@@ -18,5 +18,10 @@ func NewRouter(h *Handlers) http.Handler {
 	api.HandleFunc("/watchlists", h.ListWatchlist).Methods(http.MethodGet)
 	api.HandleFunc("/watchlists", h.CreateWatchlist).Methods(http.MethodPost)
 	api.HandleFunc("/watchlists/{id}", h.DeleteWatchlist).Methods(http.MethodDelete)
+	api.HandleFunc("/jobs", h.ListJobs).Methods(http.MethodGet)
+	api.HandleFunc("/jobs", h.EnqueueJob).Methods(http.MethodPost)
+	api.HandleFunc("/jobs/{id}", h.GetJob).Methods(http.MethodGet)
+	api.HandleFunc("/jobs/{id}/retry", h.RetryJob).Methods(http.MethodPost)
+	api.HandleFunc("/jobs/{id}/cancel", h.CancelJob).Methods(http.MethodPost)
 	return r
 }

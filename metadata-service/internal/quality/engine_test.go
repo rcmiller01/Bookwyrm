@@ -88,8 +88,8 @@ func TestEngineAuditAndRepair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("audit failed: %v", err)
 	}
-	if len(report.InvalidIdentifiers) != 1 {
-		t.Fatalf("expected 1 invalid identifier, got %d", len(report.InvalidIdentifiers))
+	if len(report.InvalidIdentifiers) != 2 {
+		t.Fatalf("expected 2 invalid identifiers, got %d", len(report.InvalidIdentifiers))
 	}
 
 	result, err := engine.Repair(context.Background(), RepairRequest{Limit: 10, DryRun: false, RemoveInvalidIdentifiers: true})

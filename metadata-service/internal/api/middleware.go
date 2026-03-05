@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type RouterOptions struct {
@@ -18,7 +20,7 @@ type RouterOptions struct {
 	RateLimitBurst     int
 }
 
-func apiVersionMiddleware(version string) muxMiddleware {
+func apiVersionMiddleware(version string) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Bookwyrm-API-Version", version)
@@ -27,7 +29,7 @@ func apiVersionMiddleware(version string) muxMiddleware {
 	}
 }
 
-func authMiddleware(enabled bool, keys []string) muxMiddleware {
+func authMiddleware(enabled bool, keys []string) mux.MiddlewareFunc {
 	if !enabled {
 		return passthroughMiddleware
 	}
@@ -120,7 +122,7 @@ func (l *apiRateLimiter) allow(clientID string, now time.Time) (bool, int) {
 	return true, maxInt(allowed-counter.count, 0)
 }
 
-func rateLimitMiddleware(enabled bool, limiter *apiRateLimiter) muxMiddleware {
+func rateLimitMiddleware(enabled bool, limiter *apiRateLimiter) mux.MiddlewareFunc {
 	if !enabled || limiter == nil {
 		return passthroughMiddleware
 	}
@@ -140,8 +142,6 @@ func rateLimitMiddleware(enabled bool, limiter *apiRateLimiter) muxMiddleware {
 		})
 	}
 }
-
-type muxMiddleware func(http.Handler) http.Handler
 
 func passthroughMiddleware(next http.Handler) http.Handler { return next }
 

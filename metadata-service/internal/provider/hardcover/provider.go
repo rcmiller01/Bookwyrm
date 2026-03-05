@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"metadata-service/internal/model"
+	"metadata-service/internal/provider"
 )
 
 const graphqlEndpoint = "https://api.hardcover.app/v1/graphql"
@@ -27,6 +30,17 @@ func New(timeoutSeconds int, token string) *Provider {
 }
 
 func (p *Provider) Name() string { return "hardcover" }
+
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsSearch:       true,
+		SupportsISBN:         true,
+		SupportsDOI:          false,
+		SupportsSeries:       true,
+		SupportsSubjects:     true,
+		SupportsAuthorSearch: true,
+	}
+}
 
 // --- GraphQL request/response helpers ---
 
@@ -91,11 +105,15 @@ type searchResult struct {
 }
 
 type hardcoverBook struct {
-	Title   string `json:"title"`
-	Author  string `json:"author"`
-	ISBN13  string `json:"isbn_13"`
-	ISBN10  string `json:"isbn_10"`
-	Year    int    `json:"year_published"`
+	Title      string   `json:"title"`
+	Author     string   `json:"author"`
+	ISBN13     string   `json:"isbn_13"`
+	ISBN10     string   `json:"isbn_10"`
+	Year       int      `json:"year_published"`
+	Series     string   `json:"series_name"`
+	SeriesPart string   `json:"series_position"`
+	Tags       []string `json:"tags"`
+	Genres     []string `json:"genres"`
 }
 
 func (p *Provider) SearchWorks(ctx context.Context, query string) ([]model.Work, error) {
@@ -127,6 +145,28 @@ func (p *Provider) SearchWorks(ctx context.Context, query string) ([]model.Work,
 			ID:           "wrk_" + uuid.NewString(),
 			Title:        b.Title,
 			FirstPubYear: b.Year,
+		}
+		if series := strings.TrimSpace(b.Series); series != "" {
+			w.SeriesName = &series
+			if idx, err := strconv.ParseFloat(strings.TrimSpace(b.SeriesPart), 64); err == nil {
+				w.SeriesIndex = &idx
+			}
+		}
+		subjectSet := map[string]struct{}{}
+		for _, tag := range append(b.Tags, b.Genres...) {
+			subject := strings.TrimSpace(tag)
+			if subject == "" {
+				continue
+			}
+			key := strings.ToLower(subject)
+			if _, ok := subjectSet[key]; ok {
+				continue
+			}
+			subjectSet[key] = struct{}{}
+			w.Subjects = append(w.Subjects, subject)
+			if len(w.Subjects) >= 25 {
+				break
+			}
 		}
 		if b.Author != "" {
 			w.Authors = []model.Author{{ID: "ath_" + uuid.NewString(), Name: b.Author}}

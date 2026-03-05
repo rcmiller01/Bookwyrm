@@ -12,9 +12,15 @@ import (
 
 func main() {
 	listenAddr := envOrDefault("INDEXER_SERVICE_ADDR", ":8091")
+	prowlarrURL := os.Getenv("PROWLARR_BASE_URL")
+	prowlarrAPIKey := os.Getenv("PROWLARR_API_KEY")
 
 	svc := indexer.NewService()
-	svc.Register("prowlarr", indexer.NewMockAdapter("prowlarr-primary", "prowlarr", []string{"availability", "files"}, true, 75*time.Millisecond))
+	if prowlarrURL != "" {
+		svc.Register("prowlarr", indexer.NewProwlarrAdapter("prowlarr-primary", prowlarrURL, prowlarrAPIKey, 10*time.Second))
+	} else {
+		svc.Register("prowlarr", indexer.NewMockAdapter("prowlarr-primary", "prowlarr", []string{"availability", "files"}, true, 75*time.Millisecond))
+	}
 	svc.Register("non_prowlarr", indexer.NewMockAdapter("nonprowlarr-archive", "non_prowlarr", []string{"availability", "news"}, true, 90*time.Millisecond))
 
 	h := api.NewHandlers(svc)

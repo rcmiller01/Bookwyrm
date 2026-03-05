@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,7 +113,7 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		p       provider.Provider
 		timeout time.Duration
 	}
-	all := r.registry.EnabledProviders()
+	all := ApplyRoutingBias(cq, r.registry.EnabledProviders())
 	scoreMap := r.loadReliabilityScores(context.Background())
 
 	var active []activeProvider
@@ -238,7 +239,23 @@ func (r *defaultResolver) ResolveIdentifier(ctx context.Context, idType string, 
 	}
 
 	// fall through to providers
-	for _, p := range r.registry.EnabledProviders() {
+	identifierQueryType := QueryTypeText
+	switch strings.ToUpper(strings.TrimSpace(idType)) {
+	case "DOI":
+		identifierQueryType = QueryTypeDOI
+	case "ISBN_10", "ISBN10":
+		identifierQueryType = QueryTypeISBN10
+	case "ISBN_13", "ISBN13":
+		identifierQueryType = QueryTypeISBN13
+	}
+
+	for _, p := range ApplyRoutingBias(ClassifiedQuery{
+		Original:        value,
+		Normalized:      NormalizeQuery(value),
+		Type:            identifierQueryType,
+		IdentifierType:  idType,
+		IdentifierValue: value,
+	}, r.registry.EnabledProviders()) {
 		if !r.rateLimiter.Allow(p.Name()) {
 			continue
 		}

@@ -205,3 +205,38 @@ health_monitor:
 		t.Fatalf("expected dispatch policy source to win precedence, got %q", cfg.ProviderDispatchPolicy.Source)
 	}
 }
+
+func TestLoad_ProviderEnvOverrides_Mailto(t *testing.T) {
+	t.Setenv("PROVIDER_CROSSREF_MAILTO", "ops@example.com")
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	content := `
+server:
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  user: metadata
+  password: metadata
+  dbname: metadata
+
+providers:
+  crossref:
+    enabled: false
+    timeout_seconds: 6
+    rate_limit: 3
+    priority: 350
+    mailto: ""
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Providers["crossref"].MailTo != "ops@example.com" {
+		t.Fatalf("expected crossref mailto env override")
+	}
+}

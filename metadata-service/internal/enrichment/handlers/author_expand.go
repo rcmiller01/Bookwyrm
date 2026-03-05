@@ -76,6 +76,9 @@ func (h *AuthorExpandHandler) Handle(ctx context.Context, job model.EnrichmentJo
 		if len(discovered) >= h.maxAuthorWorks {
 			break
 		}
+		if !provider.CapabilitiesFor(p).SupportsAuthorSearch {
+			continue
+		}
 		if h.rateLimiter != nil && !h.rateLimiter.Allow(p.Name()) {
 			continue
 		}
