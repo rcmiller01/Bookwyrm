@@ -19,8 +19,17 @@ func NewRouter(h *Handlers) http.Handler {
 
 	// Provider management endpoints
 	v1.HandleFunc("/providers", h.ListProviders).Methods(http.MethodGet)
+	v1.HandleFunc("/providers/policy", h.GetProviderPolicy).Methods(http.MethodGet)
+	v1.HandleFunc("/providers/reliability", h.ListReliabilityScores).Methods(http.MethodGet)
 	v1.HandleFunc("/providers/{name}", h.UpsertProvider).Methods(http.MethodPost, http.MethodPut)
 	v1.HandleFunc("/providers/{name}/test", h.TestProvider).Methods(http.MethodPost)
+	v1.HandleFunc("/providers/{name}/reliability", h.GetProviderReliability).Methods(http.MethodGet)
+
+	// Enrichment endpoints
+	v1.HandleFunc("/enrichment/jobs", h.ListEnrichmentJobs).Methods(http.MethodGet)
+	v1.HandleFunc("/enrichment/jobs", h.EnqueueEnrichmentJob).Methods(http.MethodPost)
+	v1.HandleFunc("/enrichment/jobs/{id}", h.GetEnrichmentJob).Methods(http.MethodGet)
+	v1.HandleFunc("/enrichment/stats", h.GetEnrichmentStats).Methods(http.MethodGet)
 
 	// Observability
 	r.Handle("/metrics", promhttp.Handler())

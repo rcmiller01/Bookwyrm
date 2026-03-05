@@ -21,13 +21,13 @@ type ProviderConfig struct {
 
 // ProviderStatus holds runtime health state for a provider.
 type ProviderStatus struct {
-	Name          string
-	Status        string // healthy, degraded, unreliable, disabled
-	FailureCount  int
-	LastSuccess   *time.Time
-	LastFailure   *time.Time
-	LastChecked   time.Time
-	AvgLatencyMs  int64
+	Name         string
+	Status       string // healthy, degraded, unreliable, quarantine, disabled
+	FailureCount int
+	LastSuccess  *time.Time
+	LastFailure  *time.Time
+	LastChecked  time.Time
+	AvgLatencyMs int64
 }
 
 // ProviderConfigStore manages provider_configs rows.

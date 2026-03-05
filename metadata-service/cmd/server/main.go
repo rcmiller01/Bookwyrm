@@ -15,6 +15,8 @@ import (
 	"metadata-service/internal/api"
 	"metadata-service/internal/cache"
 	"metadata-service/internal/config"
+	"metadata-service/internal/enrichment"
+	"metadata-service/internal/enrichment/handlers"
 	"metadata-service/internal/provider"
 	"metadata-service/internal/provider/googlebooks"
 	"metadata-service/internal/provider/hardcover"
@@ -51,14 +53,20 @@ func main() {
 	// stores
 	providerCfgStore := store.NewProviderConfigStore(pool)
 	providerStatusStore := store.NewProviderStatusStore(pool)
+	providerMetricsStore := store.NewProviderMetricsStore(pool)
+	reliabilityStore := store.NewReliabilityStore(pool)
+	enrichmentStore := store.NewEnrichmentJobStore(pool)
 
 	stores := resolver.Stores{
-		Works:    store.NewWorkStore(pool),
-		Authors:  store.NewAuthorStore(pool),
-		Editions: store.NewEditionStore(pool),
-		IDs:      store.NewIdentifierStore(pool),
-		Mappings: store.NewProviderMappingStore(pool),
-		Status:   providerStatusStore,
+		Works:       store.NewWorkStore(pool),
+		Authors:     store.NewAuthorStore(pool),
+		Editions:    store.NewEditionStore(pool),
+		IDs:         store.NewIdentifierStore(pool),
+		Mappings:    store.NewProviderMappingStore(pool),
+		Status:      providerStatusStore,
+		ProvMetrics: providerMetricsStore,
+		Reliability: reliabilityStore,
+		Enrichment:  enrichmentStore,
 	}
 
 	// cache
@@ -72,6 +80,18 @@ func main() {
 
 	// provider registry
 	registry := provider.NewRegistry()
+	quarantineMode := cfg.ProviderDispatchPolicy.QuarantineMode
+	switch quarantineMode {
+	case "", "last_resort":
+		registry.SetQuarantineDisables(false)
+		log.Info().Str("quarantine_mode", "last_resort").Msg("provider dispatch policy configured")
+	case "disabled":
+		registry.SetQuarantineDisables(true)
+		log.Info().Str("quarantine_mode", "disabled").Msg("provider dispatch policy configured")
+	default:
+		registry.SetQuarantineDisables(false)
+		log.Warn().Str("quarantine_mode", quarantineMode).Msg("unknown quarantine_mode; defaulting to last_resort")
+	}
 
 	// Build provider configs: YAML (with env var overrides already applied) supplies
 	// defaults and API keys; DB is authoritative for operational fields
@@ -150,12 +170,56 @@ func main() {
 		if interval == 0 {
 			interval = 5 * time.Minute
 		}
-		monitor := provider.NewHealthMonitor(registry, providerStatusStore, interval)
+		monitor := provider.NewHealthMonitor(registry, providerStatusStore, interval).
+			WithReliabilityStore(reliabilityStore)
 		go monitor.Start(ctx)
 	}
 
+	// reliability worker — recomputes scores every 5 minutes
+	reliabilityWorker := provider.NewReliabilityWorker(providerMetricsStore, reliabilityStore, registry, 5*time.Minute)
+	go reliabilityWorker.Start(ctx)
+
+	if cfg.Enrichment.Enabled {
+		handlerRegistry := handlers.NewRegistry()
+		handlerRegistry.Register(handlers.NewWorkEditionsHandler(
+			registry,
+			rl,
+			stores.Works,
+			stores.Editions,
+			stores.IDs,
+			stores.ProvMetrics,
+			cfg.Enrichment.Limits.MaxWorkEditions,
+		))
+		handlerRegistry.Register(handlers.NewAuthorExpandHandler(
+			registry,
+			rl,
+			stores.Works,
+			stores.Authors,
+			stores.Mappings,
+			enrichmentStore,
+			cfg.Enrichment.Limits.MaxAuthorWorks,
+			cfg.Enrichment.MaxJobsPerRequest,
+		))
+
+		enrichmentEngine := enrichment.NewEngine(cfg.Enrichment.WorkerCount, enrichmentStore, handlerRegistry)
+		go enrichmentEngine.Start(ctx)
+		log.Info().Int("workers", cfg.Enrichment.WorkerCount).Msg("enrichment engine started")
+	}
+
 	// API
-	handlers := api.NewHandlers(res, registry, rl, providerCfgStore, providerStatusStore)
+	handlers := api.NewHandlers(
+		res,
+		registry,
+		rl,
+		providerCfgStore,
+		providerStatusStore,
+		reliabilityStore,
+		enrichmentStore,
+		cfg.Enrichment.Enabled,
+		cfg.Enrichment.WorkerCount,
+		cfg.ProviderDispatchPolicy.Source,
+		cfg.ProviderDispatchPolicy.QuarantineMode,
+	)
 	router := api.NewRouter(handlers)
 
 	srv := &http.Server{
@@ -183,5 +247,3 @@ func main() {
 	defer shutdownCancel()
 	_ = srv.Shutdown(shutdownCtx)
 }
-
-

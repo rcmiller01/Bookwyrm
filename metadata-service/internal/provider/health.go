@@ -4,15 +4,18 @@ import (
 	"context"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"metadata-service/internal/store"
+
+	"github.com/rs/zerolog/log"
 )
 
 // HealthMonitor periodically pings providers and updates their status.
+// It maps the composite reliability score to a human-readable status string.
 type HealthMonitor struct {
-	registry    *Registry
-	statusStore store.ProviderStatusStore
-	interval    time.Duration
+	registry         *Registry
+	statusStore      store.ProviderStatusStore
+	reliabilityStore store.ReliabilityStore // may be nil before Phase 3 migration
+	interval         time.Duration
 }
 
 func NewHealthMonitor(registry *Registry, statusStore store.ProviderStatusStore, interval time.Duration) *HealthMonitor {
@@ -21,6 +24,13 @@ func NewHealthMonitor(registry *Registry, statusStore store.ProviderStatusStore,
 		statusStore: statusStore,
 		interval:    interval,
 	}
+}
+
+// WithReliabilityStore attaches a reliability store so the monitor can map
+// composite scores to health statuses.
+func (m *HealthMonitor) WithReliabilityStore(rs store.ReliabilityStore) *HealthMonitor {
+	m.reliabilityStore = rs
+	return m
 }
 
 // Start launches the background health check loop. Call with go monitor.Start(ctx).
@@ -68,4 +78,19 @@ func (m *HealthMonitor) checkOne(ctx context.Context, p Provider) {
 		log.Error().Err(dbErr).Str("provider", p.Name()).Msg("failed to record provider success")
 	}
 	log.Debug().Str("provider", p.Name()).Int64("latency_ms", latency).Msg("health check passed")
+
+	// If we have reliability scores, update the provider_status table with the
+	// score-derived status label so the existing provider management API reflects
+	// Phase 3 thresholds:  >0.80 healthy | 0.60-0.80 degraded | 0.40-0.60 unreliable | <0.40 quarantine
+	if m.reliabilityStore == nil {
+		return
+	}
+	score, err := m.reliabilityStore.GetScore(ctx, p.Name())
+	if err != nil {
+		return // score not yet computed — leave status as-is
+	}
+	status := HealthStatus(score.CompositeScore)
+	if updateErr := m.statusStore.UpdateStatus(ctx, p.Name(), status, 0, latency); updateErr != nil {
+		log.Warn().Err(updateErr).Str("provider", p.Name()).Msg("failed to update provider status from reliability score")
+	}
 }

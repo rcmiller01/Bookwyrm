@@ -81,9 +81,9 @@
 
 ## Testing
 
-- [ ] Write unit tests for provider registry priority ordering
-- [ ] Write unit tests for rate limiter
-- [ ] Write integration test: resolver falls back correctly when one provider returns error
+- [x] Write unit tests for provider registry priority ordering
+- [x] Write unit tests for rate limiter
+- [x] Write integration test: resolver falls back correctly when one provider returns error
 - [ ] Write integration test: `GET /v1/providers` returns correct provider list
 
 ---

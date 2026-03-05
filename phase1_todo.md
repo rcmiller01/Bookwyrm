@@ -8,25 +8,25 @@
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Initialize Go module & repo structure | [ ] |
-| 2 | Set up `go.mod` with dependencies (`gorilla/mux`, `pgx`, `ristretto`, `golang-migrate`, `zerolog`) | [ ] |
-| 3 | Create Docker Compose stack (`metadata-service` + `postgres`) | [ ] |
-| 4 | Write database migration files (authors, works, work_authors, editions, identifiers, provider_mappings) | [ ] |
-| 5 | Implement canonical data models (`Author`, `Work`, `Edition`, `Identifier`) | [ ] |
-| 6 | Implement config loader (YAML → `Config` struct) | [ ] |
-| 7 | Implement PostgreSQL store layer (`WorkStore`, `AuthorStore`, `EditionStore`, `IdentifierStore`, `ProviderMappingStore`) | [ ] |
-| 8 | Implement cache layer (`ristretto` backed `Cache` interface) | [ ] |
-| 9 | Implement provider interface & registry | [ ] |
-| 10 | Implement Open Library provider adapter | [ ] |
-| 11 | Implement query normalization (`NormalizeQuery`) | [ ] |
-| 12 | Implement query classifier (identifier vs. text) | [ ] |
-| 13 | Implement fingerprint generation | [ ] |
-| 14 | Implement merge engine | [ ] |
-| 15 | Implement identity resolver (duplicate prevention) | [ ] |
-| 16 | Implement resolver engine (full pipeline with concurrent provider dispatch) | [ ] |
-| 17 | Implement API router & handlers (`/v1/search`, `/v1/resolve`, `/v1/work/{id}`) | [ ] |
-| 18 | Wire up `main.go` entrypoint | [ ] |
-| 19 | Add Prometheus `/metrics` endpoint | [ ] |
+| 1 | Initialize Go module & repo structure | [x] |
+| 2 | Set up `go.mod` with dependencies (`gorilla/mux`, `pgx`, `ristretto`, `golang-migrate`, `zerolog`) | [x] |
+| 3 | Create Docker Compose stack (`metadata-service` + `postgres`) | [x] |
+| 4 | Write database migration files (authors, works, work_authors, editions, identifiers, provider_mappings) | [x] |
+| 5 | Implement canonical data models (`Author`, `Work`, `Edition`, `Identifier`) | [x] |
+| 6 | Implement config loader (YAML → `Config` struct) | [x] |
+| 7 | Implement PostgreSQL store layer (`WorkStore`, `AuthorStore`, `EditionStore`, `IdentifierStore`, `ProviderMappingStore`) | [x] |
+| 8 | Implement cache layer (`ristretto` backed `Cache` interface) | [x] |
+| 9 | Implement provider interface & registry | [x] |
+| 10 | Implement Open Library provider adapter | [x] |
+| 11 | Implement query normalization (`NormalizeQuery`) | [x] |
+| 12 | Implement query classifier (identifier vs. text) | [x] |
+| 13 | Implement fingerprint generation | [x] |
+| 14 | Implement merge engine | [x] |
+| 15 | Implement identity resolver (duplicate prevention) | [x] |
+| 16 | Implement resolver engine (full pipeline with concurrent provider dispatch) | [x] |
+| 17 | Implement API router & handlers (`/v1/search`, `/v1/resolve`, `/v1/work/{id}`) | [x] |
+| 18 | Wire up `main.go` entrypoint | [x] |
+| 19 | Add Prometheus `/metrics` endpoint | [x] |
 | 20 | Validate Phase 1 success criteria (<500ms cached, <2s provider queries, no crashes) | [ ] |
 
 ---

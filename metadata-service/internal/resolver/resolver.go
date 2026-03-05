@@ -6,12 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"metadata-service/internal/cache"
 	"metadata-service/internal/metrics"
 	"metadata-service/internal/model"
 	"metadata-service/internal/provider"
 	"metadata-service/internal/store"
+
+	"github.com/rs/zerolog/log"
 )
 
 type Resolver interface {
@@ -22,12 +23,15 @@ type Resolver interface {
 
 // Stores bundles all store dependencies.
 type Stores struct {
-	Works    store.WorkStore
-	Authors  store.AuthorStore
-	Editions store.EditionStore
-	IDs      store.IdentifierStore
-	Mappings store.ProviderMappingStore
-	Status   store.ProviderStatusStore
+	Works       store.WorkStore
+	Authors     store.AuthorStore
+	Editions    store.EditionStore
+	IDs         store.IdentifierStore
+	Mappings    store.ProviderMappingStore
+	Status      store.ProviderStatusStore
+	ProvMetrics store.ProviderMetricsStore
+	Reliability store.ReliabilityStore
+	Enrichment  store.EnrichmentJobStore
 }
 
 type defaultResolver struct {
@@ -39,6 +43,9 @@ type defaultResolver struct {
 	ids         store.IdentifierStore
 	mappings    store.ProviderMappingStore
 	status      store.ProviderStatusStore
+	provMetrics store.ProviderMetricsStore
+	reliability store.ReliabilityStore
+	enrichment  store.EnrichmentJobStore
 	cache       cache.Cache
 	merger      Merger
 	identity    IdentityResolver
@@ -54,6 +61,9 @@ func New(registry *provider.Registry, rateLimiter *provider.RateLimiter, s Store
 		ids:         s.IDs,
 		mappings:    s.Mappings,
 		status:      s.Status,
+		provMetrics: s.ProvMetrics,
+		reliability: s.Reliability,
+		enrichment:  s.Enrichment,
 		cache:       c,
 		merger:      NewMerger(),
 		identity:    NewIdentityResolver(s.Works, s.Mappings),
@@ -103,6 +113,8 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		timeout time.Duration
 	}
 	all := r.registry.EnabledProviders()
+	scoreMap := r.loadReliabilityScores(context.Background())
+
 	var active []activeProvider
 	for _, p := range all {
 		if !r.rateLimiter.Allow(p.Name()) {
@@ -112,7 +124,7 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		active = append(active, activeProvider{p: p, timeout: r.registry.TimeoutFor(p.Name())})
 	}
 
-	resultsCh := make(chan []model.Work, len(active))
+	resultsCh := make(chan ProviderResult, len(active))
 
 	var wg sync.WaitGroup
 	for _, ap := range active {
@@ -129,21 +141,18 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 			defer cancel()
 
 			results, err := ap.p.SearchWorks(pCtx, cq.Normalized)
-			elapsed := time.Since(pStart).Milliseconds()
-			metrics.ProviderLatencyMs.WithLabelValues(ap.p.Name()).Observe(float64(elapsed))
+			elapsed := time.Since(pStart)
+			metrics.ProviderLatencyMs.WithLabelValues(ap.p.Name()).Observe(float64(elapsed.Milliseconds()))
 
 			if err != nil {
 				metrics.ProviderFailuresTotal.WithLabelValues(ap.p.Name()).Inc()
 				log.Warn().Err(err).Str("provider", ap.p.Name()).Msg("provider search failed")
-				if r.status != nil {
-					_ = r.status.RecordFailure(context.Background(), ap.p.Name())
-				}
+				r.recordFailure(context.Background(), ap.p.Name())
 				return
 			}
-			if r.status != nil {
-				_ = r.status.RecordSuccess(context.Background(), ap.p.Name(), elapsed)
-			}
-			resultsCh <- results
+			metrics.ProviderSuccessTotal.WithLabelValues(ap.p.Name()).Inc()
+			r.recordSuccess(context.Background(), ap.p.Name(), elapsed)
+			resultsCh <- ProviderResult{Provider: ap.p.Name(), Works: results}
 		}(ap)
 	}
 
@@ -155,9 +164,9 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		close(resultsCh)
 	}()
 
-	var allResults [][]model.Work
-	for batch := range resultsCh {
-		allResults = append(allResults, batch)
+	var allResults []ProviderResult
+	for pr := range resultsCh {
+		allResults = append(allResults, pr)
 	}
 
 	// fallback: if all providers failed, return whatever DB had
@@ -166,7 +175,7 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 		return dbResults, nil
 	}
 
-	merged, err := r.merger.MergeWorks(allResults)
+	merged, err := r.merger.MergeWorksWeighted(allResults, scoreMap)
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +192,7 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 	}
 
 	r.cache.Set(cacheKey, merged, time.Hour)
+	r.scheduleSearchEnrichment(context.Background(), merged)
 	return merged, nil
 }
 
@@ -234,12 +244,17 @@ func (r *defaultResolver) ResolveIdentifier(ctx context.Context, idType string, 
 		metrics.ProviderRequestsTotal.WithLabelValues(p.Name()).Inc()
 		pStart := time.Now()
 		edition, err := p.ResolveIdentifier(ctx, idType, value)
-		metrics.ProviderLatencyMs.WithLabelValues(p.Name()).Observe(float64(time.Since(pStart).Milliseconds()))
+		elapsed := time.Since(pStart)
+		metrics.ProviderLatencyMs.WithLabelValues(p.Name()).Observe(float64(elapsed.Milliseconds()))
 		if err == nil && edition != nil {
+			metrics.ProviderSuccessTotal.WithLabelValues(p.Name()).Inc()
+			r.recordSuccess(context.Background(), p.Name(), elapsed)
 			r.cache.Set(cacheKey, *edition, time.Hour)
+			r.scheduleIdentifierEnrichment(context.Background(), *edition)
 			return edition, nil
 		}
 		metrics.ProviderFailuresTotal.WithLabelValues(p.Name()).Inc()
+		r.recordFailure(context.Background(), p.Name())
 	}
 
 	return nil, fmt.Errorf("identifier not found: %s %s", idType, value)
@@ -270,3 +285,91 @@ func (r *defaultResolver) GetWork(ctx context.Context, id string) (*model.Work, 
 	return w, nil
 }
 
+// --- reliability helpers ---
+
+// loadReliabilityScores returns a map of provider name → composite score.
+// If the reliability store is unavailable, an empty map is returned so the
+// resolver falls back to the configured priority order.
+func (r *defaultResolver) loadReliabilityScores(ctx context.Context) map[string]float64 {
+	out := make(map[string]float64)
+	if r.reliability == nil {
+		return out
+	}
+	scores, err := r.reliability.GetAllScores(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("resolver: failed to load reliability scores, using priority order")
+		return out
+	}
+	for _, s := range scores {
+		out[s.Provider] = s.CompositeScore
+	}
+	return out
+}
+
+// recordSuccess records a successful provider call to both the legacy status
+// store and the new provider_metrics table.
+func (r *defaultResolver) recordSuccess(ctx context.Context, providerName string, elapsed time.Duration) {
+	if r.status != nil {
+		_ = r.status.RecordSuccess(ctx, providerName, elapsed.Milliseconds())
+	}
+	if r.provMetrics != nil {
+		_ = r.provMetrics.RecordSuccess(ctx, providerName, elapsed)
+	}
+}
+
+// recordFailure records a failed provider call to both the legacy status
+// store and the new provider_metrics table.
+func (r *defaultResolver) recordFailure(ctx context.Context, providerName string) {
+	if r.status != nil {
+		_ = r.status.RecordFailure(ctx, providerName)
+	}
+	if r.provMetrics != nil {
+		_ = r.provMetrics.RecordFailure(ctx, providerName)
+	}
+}
+
+// scheduleSearchEnrichment enqueues best-effort enrichment jobs without blocking
+// the interactive request path.
+func (r *defaultResolver) scheduleSearchEnrichment(ctx context.Context, works []model.Work) {
+	if r.enrichment == nil || len(works) == 0 {
+		return
+	}
+	go func() {
+		const maxJobs = 3
+		const minConfidence = 0.85
+
+		enqueued := 0
+		for _, work := range works {
+			if enqueued >= maxJobs {
+				break
+			}
+			if work.ID == "" || work.Confidence < minConfidence {
+				continue
+			}
+			_, err := r.enrichment.EnqueueJob(ctx, model.EnrichmentJob{
+				JobType:    model.EnrichmentJobTypeWorkEditions,
+				EntityType: "work",
+				EntityID:   work.ID,
+				Priority:   50,
+			})
+			if err == nil {
+				enqueued++
+			}
+		}
+	}()
+}
+
+// scheduleIdentifierEnrichment enqueues work_editions for resolved identifier hits.
+func (r *defaultResolver) scheduleIdentifierEnrichment(ctx context.Context, edition model.Edition) {
+	if r.enrichment == nil || edition.WorkID == "" {
+		return
+	}
+	go func() {
+		_, _ = r.enrichment.EnqueueJob(ctx, model.EnrichmentJob{
+			JobType:    model.EnrichmentJobTypeWorkEditions,
+			EntityType: "work",
+			EntityID:   edition.WorkID,
+			Priority:   50,
+		})
+	}()
+}

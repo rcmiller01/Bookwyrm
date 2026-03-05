@@ -8,16 +8,32 @@ import (
 
 const defaultProviderTimeout = 10 * time.Second
 
+// DispatchTier defines the reliability-based execution tier for providers.
+// Lower values are dispatched earlier.
+type DispatchTier int
+
+const (
+	DispatchTierPrimary DispatchTier = iota
+	DispatchTierSecondary
+	DispatchTierFallback
+	DispatchTierQuarantine
+	DispatchTierUnclassified // score unavailable; fallback to configured priority
+)
+
 type registeredProvider struct {
-	provider Provider
-	priority int
-	enabled  bool
-	timeout  time.Duration
+	provider         Provider
+	priority         int
+	enabled          bool
+	timeout          time.Duration
+	hasScore         bool
+	reliabilityScore float64
+	tier             DispatchTier
 }
 
 type Registry struct {
-	mu        sync.RWMutex
-	providers map[string]*registeredProvider
+	mu                 sync.RWMutex
+	providers          map[string]*registeredProvider
+	quarantineDisables bool
 }
 
 func NewRegistry() *Registry {
@@ -39,6 +55,34 @@ func (r *Registry) RegisterWithConfig(p Provider, priority int, enabled bool) {
 		priority: priority,
 		enabled:  enabled,
 		timeout:  defaultProviderTimeout,
+		tier:     DispatchTierUnclassified,
+	}
+}
+
+// SetQuarantineDisables controls whether quarantine-tier providers are skipped.
+// When false (default), quarantine providers remain enabled as last-resort sources.
+func (r *Registry) SetQuarantineDisables(disable bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.quarantineDisables = disable
+}
+
+// QuarantineDisables returns whether quarantine-tier providers are skipped.
+func (r *Registry) QuarantineDisables() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.quarantineDisables
+}
+
+// SetReliability updates a provider's runtime reliability metadata used for
+// dispatch ordering.
+func (r *Registry) SetReliability(name string, score float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if rp, ok := r.providers[name]; ok {
+		rp.hasScore = true
+		rp.reliabilityScore = score
+		rp.tier = TierForScore(score)
 	}
 }
 
@@ -98,14 +142,30 @@ func (r *Registry) EnabledProviders() []Provider {
 	type entry struct {
 		p        Provider
 		priority int
+		hasScore bool
+		score    float64
+		tier     DispatchTier
 	}
 	var entries []entry
 	for _, rp := range r.providers {
-		if rp.enabled {
-			entries = append(entries, entry{rp.provider, rp.priority})
+		if !rp.enabled {
+			continue
 		}
+		if r.quarantineDisables && rp.tier == DispatchTierQuarantine {
+			continue
+		}
+		entries = append(entries, entry{rp.provider, rp.priority, rp.hasScore, rp.reliabilityScore, rp.tier})
 	}
 	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].hasScore && entries[j].hasScore {
+			if entries[i].tier != entries[j].tier {
+				return entries[i].tier < entries[j].tier
+			}
+			if entries[i].score != entries[j].score {
+				return entries[i].score > entries[j].score
+			}
+			return entries[i].priority < entries[j].priority
+		}
 		return entries[i].priority < entries[j].priority
 	})
 

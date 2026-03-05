@@ -13,7 +13,7 @@ type stubProvider struct {
 	name string
 }
 
-func (s *stubProvider) Name() string                                              { return s.name }
+func (s *stubProvider) Name() string { return s.name }
 func (s *stubProvider) SearchWorks(_ context.Context, _ string) ([]model.Work, error) {
 	return nil, nil
 }
@@ -206,5 +206,56 @@ func TestRegistry_SetTimeout_IndependentPerProvider(t *testing.T) {
 	}
 	if got := reg.TimeoutFor("slow"); got != 30*time.Second {
 		t.Errorf("slow timeout: want 30s, got %v", got)
+	}
+}
+
+func TestRegistry_ReliabilityTierOrdering(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"a"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"b"}, 20, true)
+	reg.RegisterWithConfig(&stubProvider{"c"}, 30, true)
+
+	reg.SetReliability("b", 0.95) // primary
+	reg.SetReliability("c", 0.65) // secondary
+	reg.SetReliability("a", 0.45) // fallback
+
+	got := reg.EnabledProviders()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 providers, got %d", len(got))
+	}
+	want := []string{"b", "c", "a"}
+	for i, p := range got {
+		if p.Name() != want[i] {
+			t.Errorf("position %d: want %q, got %q", i, want[i], p.Name())
+		}
+	}
+}
+
+func TestRegistry_QuarantineNotSkippedByDefault(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"q"}, 1, true)
+	reg.SetReliability("q", 0.2) // quarantine tier
+
+	got := reg.EnabledProviders()
+	if len(got) != 1 {
+		t.Fatalf("expected quarantine provider to remain dispatchable by default, got %d providers", len(got))
+	}
+}
+
+func TestRegistry_QuarantineCanBeSkipped(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"good"}, 1, true)
+	reg.RegisterWithConfig(&stubProvider{"bad"}, 2, true)
+	reg.SetReliability("good", 0.9)
+	reg.SetReliability("bad", 0.1) // quarantine tier
+
+	reg.SetQuarantineDisables(true)
+
+	got := reg.EnabledProviders()
+	if len(got) != 1 {
+		t.Fatalf("expected only 1 provider when quarantine is skipped, got %d", len(got))
+	}
+	if got[0].Name() != "good" {
+		t.Fatalf("expected good provider, got %q", got[0].Name())
 	}
 }

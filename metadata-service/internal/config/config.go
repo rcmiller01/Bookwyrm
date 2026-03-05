@@ -22,18 +22,45 @@ type Config struct {
 
 	Providers map[string]ProviderConfig `yaml:"providers"`
 
+	ProviderDispatchPolicy DispatchPolicyConfig `yaml:"-"`
+
 	HealthMonitor struct {
 		Enabled         bool `yaml:"enabled"`
 		IntervalMinutes int  `yaml:"interval_minutes"`
 	} `yaml:"health_monitor"`
+
+	Enrichment EnrichmentConfig `yaml:"enrichment"`
 }
 
 type ProviderConfig struct {
-	Enabled        bool   `yaml:"enabled"`
-	TimeoutSeconds int    `yaml:"timeout_seconds"`
-	RateLimit      int    `yaml:"rate_limit"`
-	Priority       int    `yaml:"priority"`
-	APIKey         string `yaml:"api_key"`
+	Enabled         bool   `yaml:"enabled"`
+	TimeoutSeconds  int    `yaml:"timeout_seconds"`
+	RateLimit       int    `yaml:"rate_limit"`
+	Priority        int    `yaml:"priority"`
+	APIKey          string `yaml:"api_key"`
+	QuarantineMode  string `yaml:"quarantine_mode"`
+	DisableDispatch bool   `yaml:"disable_dispatch"`
+}
+
+type DispatchPolicyConfig struct {
+	QuarantineMode string
+	Source         string
+}
+
+type EnrichmentConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	WorkerCount       int  `yaml:"worker_count"`
+	MaxJobsPerRequest int  `yaml:"max_jobs_per_request"`
+
+	Limits struct {
+		MaxAuthorWorks  int `yaml:"max_author_works"`
+		MaxWorkEditions int `yaml:"max_work_editions"`
+	} `yaml:"limits"`
+
+	Preferences struct {
+		Languages []string `yaml:"languages"`
+		Formats   []string `yaml:"formats"`
+	} `yaml:"preferences"`
 }
 
 func Load(path string) (*Config, error) {
@@ -46,6 +73,58 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, err
+	}
+
+	cfg.ProviderDispatchPolicy.QuarantineMode = "last_resort"
+	cfg.ProviderDispatchPolicy.Source = "default"
+
+	if cfg.Providers == nil {
+		cfg.Providers = map[string]ProviderConfig{}
+	}
+
+	if cfg.Enrichment.WorkerCount <= 0 {
+		cfg.Enrichment.WorkerCount = 2
+	}
+	if cfg.Enrichment.MaxJobsPerRequest <= 0 {
+		cfg.Enrichment.MaxJobsPerRequest = 5
+	}
+	if cfg.Enrichment.Limits.MaxAuthorWorks <= 0 {
+		cfg.Enrichment.Limits.MaxAuthorWorks = 50
+	}
+	if cfg.Enrichment.Limits.MaxWorkEditions <= 0 {
+		cfg.Enrichment.Limits.MaxWorkEditions = 100
+	}
+
+	hasDispatchPolicy := false
+	if pc, ok := cfg.Providers["dispatch_policy"]; ok {
+		hasDispatchPolicy = true
+		mode := strings.ToLower(strings.TrimSpace(pc.QuarantineMode))
+		if mode == "" {
+			if pc.DisableDispatch {
+				mode = "disabled"
+			} else {
+				mode = "last_resort"
+			}
+		}
+		cfg.ProviderDispatchPolicy.QuarantineMode = mode
+		cfg.ProviderDispatchPolicy.Source = "providers.dispatch_policy.quarantine_mode"
+		delete(cfg.Providers, "dispatch_policy")
+	}
+
+	if quarantine, ok := cfg.Providers["quarantine"]; ok {
+		if !hasDispatchPolicy {
+			mode := strings.ToLower(strings.TrimSpace(quarantine.QuarantineMode))
+			if mode == "" {
+				if quarantine.DisableDispatch {
+					mode = "disabled"
+				} else {
+					mode = "last_resort"
+				}
+			}
+			cfg.ProviderDispatchPolicy.QuarantineMode = mode
+			cfg.ProviderDispatchPolicy.Source = "providers.quarantine.disable_dispatch"
+		}
+		delete(cfg.Providers, "quarantine")
 	}
 
 	// environment overrides
