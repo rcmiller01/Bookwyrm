@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +12,7 @@ import (
 
 	"metadata-service/internal/model"
 	"metadata-service/internal/provider"
+	"metadata-service/internal/quality"
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
@@ -21,6 +24,7 @@ import (
 type Handlers struct {
 	resolver          resolver.Resolver
 	recommender       recommendationService
+	qualityEngine     qualityEngineService
 	registry          *provider.Registry
 	rateLimiter       *provider.RateLimiter
 	cfgStore          store.ProviderConfigStore
@@ -43,9 +47,15 @@ type recommendationService interface {
 	RecommendSimilar(ctx context.Context, workID string, limit int, preferences recommend.RecommendationPreferences) ([]recommend.RecommendationResult, error)
 }
 
+type qualityEngineService interface {
+	Audit(ctx context.Context, limit int) (*quality.AuditReport, error)
+	Repair(ctx context.Context, req quality.RepairRequest) (*quality.RepairResult, error)
+}
+
 func NewHandlers(
 	res resolver.Resolver,
 	recommender recommendationService,
+	qualityEngine qualityEngineService,
 	registry *provider.Registry,
 	rl *provider.RateLimiter,
 	cfgStore store.ProviderConfigStore,
@@ -64,6 +74,7 @@ func NewHandlers(
 	return &Handlers{
 		resolver:          res,
 		recommender:       recommender,
+		qualityEngine:     qualityEngine,
 		registry:          registry,
 		rateLimiter:       rl,
 		cfgStore:          cfgStore,
@@ -683,6 +694,78 @@ func healthStatusFromScore(score float64) string {
 	default:
 		return "quarantine"
 	}
+}
+
+// --- Metadata quality endpoints ---
+
+// GetQualityReport handles GET /v1/quality/report.
+func (h *Handlers) GetQualityReport(w http.ResponseWriter, r *http.Request) {
+	if h.qualityEngine == nil {
+		writeError(w, "quality engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	limit := 25
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			writeError(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		if parsed > 200 {
+			parsed = 200
+		}
+		limit = parsed
+	}
+
+	report, err := h.qualityEngine.Audit(r.Context(), limit)
+	if err != nil {
+		log.Error().Err(err).Msg("quality report generation failed")
+		writeError(w, "failed to generate quality report", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, QualityReportResponse{Report: *report})
+}
+
+// RepairQualityIssues handles POST /v1/quality/repair.
+func (h *Handlers) RepairQualityIssues(w http.ResponseWriter, r *http.Request) {
+	if h.qualityEngine == nil {
+		writeError(w, "quality engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req RepairQualityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	removeInvalid := true
+	if req.RemoveInvalidIdentifiers != nil {
+		removeInvalid = *req.RemoveInvalidIdentifiers
+	}
+
+	result, err := h.qualityEngine.Repair(r.Context(), quality.RepairRequest{
+		Limit:                    limit,
+		DryRun:                   req.DryRun,
+		RemoveInvalidIdentifiers: removeInvalid,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("metadata quality repair failed")
+		writeError(w, "failed to apply quality repairs", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, QualityRepairResponse{Result: *result})
 }
 
 // --- helpers ---

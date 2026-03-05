@@ -1,5 +1,4 @@
 package librarything
-package librarything
 
 import "testing"
 

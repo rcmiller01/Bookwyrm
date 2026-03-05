@@ -1,5 +1,4 @@
 package annasarchive
-package annasarchive
 
 import "testing"
 

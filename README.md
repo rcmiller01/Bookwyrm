@@ -65,3 +65,24 @@ Migration files:
 
 - `migrations/000006_advanced_metadata_sources.up.sql`
 - `migrations/000006_advanced_metadata_sources.down.sql`
+
+## Metadata Quality Engine (Phase 9)
+
+Quality APIs are available for inconsistency detection and targeted repair:
+
+- `GET /v1/quality/report`
+- `POST /v1/quality/repair`
+
+Supported capabilities:
+
+- Graph anomaly detection for series entries with missing/duplicate ordering indexes
+- Conflicting publication year detection across editions of the same work
+- Duplicate edition cluster detection (report-only)
+- Identifier verification for ISBN-10 and ISBN-13 values
+
+Repair behavior:
+
+- Supports dry-run mode via `{"dry_run": true}`
+- Reorders malformed series entry indexes into deterministic sequence order
+- Normalizes `works.first_pub_year` to the minimum known edition publication year for conflicted works
+- Optionally removes invalid ISBN identifiers (`remove_invalid_identifiers`, default true)

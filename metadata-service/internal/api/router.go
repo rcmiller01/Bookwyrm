@@ -38,6 +38,10 @@ func NewRouter(h *Handlers) http.Handler {
 	v1.HandleFunc("/enrichment/jobs/{id}", h.GetEnrichmentJob).Methods(http.MethodGet)
 	v1.HandleFunc("/enrichment/stats", h.GetEnrichmentStats).Methods(http.MethodGet)
 
+	// Quality endpoints
+	v1.HandleFunc("/quality/report", h.GetQualityReport).Methods(http.MethodGet)
+	v1.HandleFunc("/quality/repair", h.RepairQualityIssues).Methods(http.MethodPost)
+
 	// Observability
 	r.Handle("/metrics", promhttp.Handler())
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

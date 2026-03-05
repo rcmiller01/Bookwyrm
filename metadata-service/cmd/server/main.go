@@ -25,6 +25,7 @@ import (
 	"metadata-service/internal/provider/librarything"
 	"metadata-service/internal/provider/openlibrary"
 	"metadata-service/internal/provider/worldcat"
+	"metadata-service/internal/quality"
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
@@ -199,6 +200,7 @@ func main() {
 		CacheTTL:           time.Duration(cfg.Recommendation.CacheTTLHours) * time.Hour,
 	}
 	recommendEngine := recommend.NewEngine(recommendReadStore, c, recommendOptions)
+	qualityEngine := quality.NewEngine(quality.NewPGRepository(pool))
 
 	// health monitor
 	if cfg.HealthMonitor.Enabled {
@@ -248,6 +250,7 @@ func main() {
 	handlers := api.NewHandlers(
 		res,
 		recommendEngine,
+		qualityEngine,
 		registry,
 		rl,
 		providerCfgStore,

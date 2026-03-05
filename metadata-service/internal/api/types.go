@@ -2,6 +2,7 @@ package api
 
 import (
 	"metadata-service/internal/model"
+	"metadata-service/internal/quality"
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/store"
 	"time"
@@ -150,6 +151,20 @@ type ReliabilityListResponse struct {
 // ReliabilityDetailResponse is returned by GET /v1/providers/{name}/reliability.
 type ReliabilityDetailResponse struct {
 	Provider ReliabilityInfo `json:"provider"`
+}
+
+type QualityReportResponse struct {
+	Report quality.AuditReport `json:"report"`
+}
+
+type RepairQualityRequest struct {
+	Limit                    int   `json:"limit,omitempty"`
+	DryRun                   bool  `json:"dry_run"`
+	RemoveInvalidIdentifiers *bool `json:"remove_invalid_identifiers,omitempty"`
+}
+
+type QualityRepairResponse struct {
+	Result quality.RepairResult `json:"result"`
 }
 
 func mergeProviderInfo(cfgs []store.ProviderConfig, statuses []store.ProviderStatus) []ProviderInfo {

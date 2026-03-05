@@ -1,5 +1,4 @@
 package worldcat
-package worldcat
 
 import "testing"
 
