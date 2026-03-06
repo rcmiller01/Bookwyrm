@@ -97,6 +97,50 @@ func (h *Handlers) EnqueueWorkSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handlers) BulkSearch(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Items []struct {
+			EntityType string `json:"entity_type"`
+			EntityID   string `json:"entity_id"`
+			Title      string `json:"title"`
+			Author     string `json:"author"`
+			ISBN       string `json:"isbn"`
+			DOI        string `json:"doi"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	requests := make([]map[string]any, 0, len(body.Items))
+	for _, item := range body.Items {
+		entityType := strings.TrimSpace(item.EntityType)
+		if entityType == "" {
+			entityType = "work"
+		}
+		entityID := strings.TrimSpace(item.EntityID)
+		if entityID == "" {
+			continue
+		}
+		spec := indexer.QuerySpec{
+			EntityType: entityType,
+			EntityID:   entityID,
+			Title:      strings.TrimSpace(item.Title),
+			Author:     strings.TrimSpace(item.Author),
+			ISBN:       strings.TrimSpace(item.ISBN),
+			DOI:        strings.TrimSpace(item.DOI),
+		}
+		req := h.orchestrator.Enqueue(spec)
+		requests = append(requests, map[string]any{
+			"search_request_id": req.ID,
+			"status":            req.Status,
+			"entity_type":       entityType,
+			"entity_id":         entityID,
+		})
+	}
+	writeJSON(w, map[string]any{"items": requests})
+}
+
 func (h *Handlers) SetWantedWork(w http.ResponseWriter, r *http.Request) {
 	workID := strings.TrimSpace(mux.Vars(r)["workID"])
 	if workID == "" {
@@ -107,6 +151,8 @@ func (h *Handlers) SetWantedWork(w http.ResponseWriter, r *http.Request) {
 		Enabled        bool     `json:"enabled"`
 		Priority       int      `json:"priority"`
 		CadenceMinutes int      `json:"cadence_minutes"`
+		ProfileID      string   `json:"profile_id"`
+		IgnoreUpgrades bool     `json:"ignore_upgrades"`
 		Formats        []string `json:"formats"`
 		Languages      []string `json:"languages"`
 	}
@@ -122,6 +168,8 @@ func (h *Handlers) SetWantedWork(w http.ResponseWriter, r *http.Request) {
 		Enabled:        body.Enabled,
 		Priority:       body.Priority,
 		CadenceMinutes: body.CadenceMinutes,
+		ProfileID:      strings.TrimSpace(body.ProfileID),
+		IgnoreUpgrades: body.IgnoreUpgrades,
 		Formats:        body.Formats,
 		Languages:      body.Languages,
 	})
@@ -159,6 +207,7 @@ func (h *Handlers) SetWantedAuthor(w http.ResponseWriter, r *http.Request) {
 		Enabled        bool     `json:"enabled"`
 		Priority       int      `json:"priority"`
 		CadenceMinutes int      `json:"cadence_minutes"`
+		ProfileID      string   `json:"profile_id"`
 		Formats        []string `json:"formats"`
 		Languages      []string `json:"languages"`
 	}
@@ -174,6 +223,7 @@ func (h *Handlers) SetWantedAuthor(w http.ResponseWriter, r *http.Request) {
 		Enabled:        body.Enabled,
 		Priority:       body.Priority,
 		CadenceMinutes: body.CadenceMinutes,
+		ProfileID:      strings.TrimSpace(body.ProfileID),
 		Formats:        body.Formats,
 		Languages:      body.Languages,
 	})
@@ -196,6 +246,83 @@ func (h *Handlers) DeleteWantedAuthor(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.DeleteWantedAuthor(authorID); err != nil {
 		writeError(w, "wanted author not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) ListProfiles(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{
+		"items":              h.store.ListProfiles(),
+		"default_profile_id": h.store.GetDefaultProfileID(),
+	})
+}
+
+func (h *Handlers) UpsertProfile(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	var body struct {
+		ID             string `json:"id"`
+		Name           string `json:"name"`
+		CutoffQuality  string `json:"cutoff_quality"`
+		DefaultProfile bool   `json:"default_profile"`
+		Qualities      []struct {
+			Quality string `json:"quality"`
+			Rank    int    `json:"rank"`
+		} `json:"qualities"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if id == "" {
+		id = strings.TrimSpace(body.ID)
+	}
+	if id == "" {
+		writeError(w, "profile id is required", http.StatusBadRequest)
+		return
+	}
+	profile := indexer.ProfileRecord{
+		ID:             id,
+		Name:           strings.TrimSpace(body.Name),
+		CutoffQuality:  strings.TrimSpace(body.CutoffQuality),
+		DefaultProfile: body.DefaultProfile,
+	}
+	qualities := make([]indexer.ProfileQualityRecord, 0, len(body.Qualities))
+	for i, q := range body.Qualities {
+		quality := strings.TrimSpace(q.Quality)
+		if quality == "" {
+			continue
+		}
+		rank := q.Rank
+		if rank <= 0 {
+			rank = i + 1
+		}
+		qualities = append(qualities, indexer.ProfileQualityRecord{
+			ProfileID: id,
+			Quality:   quality,
+			Rank:      rank,
+		})
+	}
+	result, err := h.store.UpsertProfile(profile, qualities)
+	if err != nil {
+		writeError(w, "failed to upsert profile", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, result)
+}
+
+func (h *Handlers) DeleteProfile(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if id == "" {
+		writeError(w, "missing profile id", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.DeleteProfile(id); err != nil {
+		if err == indexer.ErrNotFound {
+			writeError(w, "profile not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, err.Error(), http.StatusConflict)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

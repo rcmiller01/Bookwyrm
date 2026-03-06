@@ -484,10 +484,10 @@ No auth required; single-origin deployment works.
 - [x] A — Backend UI serving/proxy
 - [x] B — UI shell/shared patterns
 - [x] C — Dashboard
-- [ ] D — Library pages
+- [x] D — Library pages
 - [x] E — Manual search/grab
 - [x] F — Activity pages
-- [ ] G — Wanted pages
-- [ ] H — Settings pages
-- [ ] I — System pages
+- [x] G — Wanted pages
+- [x] H — Settings pages
+- [x] I — System pages
 - [ ] J — Testing/quality

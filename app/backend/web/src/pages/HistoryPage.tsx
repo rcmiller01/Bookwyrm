@@ -1,5 +1,9 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { FilterBar } from '../components/FilterBar'
+import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
+import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON } from '../lib/api'
 
 type DownloadJob = {
@@ -32,16 +36,18 @@ type HistoryItem = {
 }
 
 export function HistoryPage() {
+  const [kindFilter, setKindFilter] = useLocalStorageState<'all' | 'download' | 'import'>('history.filter.kind', 'all')
+
   const downloadsQuery = useQuery({
     queryKey: ['activity', 'history', 'downloads'],
     queryFn: () => fetchJSON<DownloadJobsResponse>('/api/v1/download/jobs?limit=200'),
-    refetchInterval: 10000
+    refetchInterval: 15000
   })
 
   const importsQuery = useQuery({
     queryKey: ['activity', 'history', 'imports'],
     queryFn: () => fetchJSON<ImportJobsResponse>('/api/v1/import/jobs?limit=200'),
-    refetchInterval: 10000
+    refetchInterval: 15000
   })
 
   const items = useMemo(() => {
@@ -52,7 +58,7 @@ export function HistoryPage() {
       workID: job.work_id || '-',
       status: job.status,
       updatedAt: job.updated_at,
-      detail: `${job.client_name} • ${job.protocol}`
+      detail: `${job.client_name} - ${job.protocol}`
     }))
 
     const fromImports: HistoryItem[] = (importsQuery.data?.items ?? []).map((job) => ({
@@ -65,15 +71,22 @@ export function HistoryPage() {
       detail: job.source_path
     }))
 
-    return [...fromDownloads, ...fromImports].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  }, [downloadsQuery.data?.items, importsQuery.data?.items])
+    return [...fromDownloads, ...fromImports]
+      .filter((item) => (kindFilter === 'all' ? true : item.kind === kindFilter))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }, [downloadsQuery.data?.items, importsQuery.data?.items, kindFilter])
 
   return (
     <section className="space-y-4">
-      <header>
-        <h2 className="text-2xl font-semibold text-slate-100">History</h2>
-        <p className="text-sm text-slate-400">Recent download and import activity.</p>
-      </header>
+      <PageHeader title="History" subtitle="Recent download and import activity." />
+
+      <FilterBar>
+        <select className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" value={kindFilter} onChange={(event) => setKindFilter(event.target.value as 'all' | 'download' | 'import')}>
+          <option value="all">All</option>
+          <option value="download">Downloads</option>
+          <option value="import">Imports</option>
+        </select>
+      </FilterBar>
 
       <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/50">
         <table className="w-full text-left text-sm">
@@ -93,7 +106,7 @@ export function HistoryPage() {
                 <td className="px-3 py-2 capitalize">{item.kind}</td>
                 <td className="px-3 py-2">{item.sourceID}</td>
                 <td className="px-3 py-2">{item.workID}</td>
-                <td className="px-3 py-2">{item.status}</td>
+                <td className="px-3 py-2"><StatusBadge label={item.status} /></td>
                 <td className="max-w-sm truncate px-3 py-2 text-slate-300" title={item.detail}>
                   {item.detail}
                 </td>

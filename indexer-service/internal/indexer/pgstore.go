@@ -490,20 +490,25 @@ func (s *PGStore) GetGrabByID(id int64) (GrabRecord, error) {
 }
 
 func (s *PGStore) SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error) {
+	if rec.ProfileID == "" {
+		rec.ProfileID = s.GetDefaultProfileID()
+	}
 	row := s.db.QueryRow(context.Background(), `
 		INSERT INTO indexer_wanted_works
-			(work_id, enabled, priority, cadence_minutes, formats, languages, created_at, updated_at)
+			(work_id, enabled, priority, cadence_minutes, profile_id, ignore_upgrades, formats, languages, created_at, updated_at)
 		VALUES
-			($1,$2,$3,$4,$5,$6,NOW(),NOW())
+			($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
 		ON CONFLICT (work_id) DO UPDATE SET
 			enabled=EXCLUDED.enabled,
 			priority=EXCLUDED.priority,
 			cadence_minutes=EXCLUDED.cadence_minutes,
+			profile_id=EXCLUDED.profile_id,
+			ignore_upgrades=EXCLUDED.ignore_upgrades,
 			formats=EXCLUDED.formats,
 			languages=EXCLUDED.languages,
 			updated_at=NOW()
-		RETURNING work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at`,
-		rec.WorkID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.Formats, rec.Languages,
+		RETURNING work_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), ignore_upgrades, formats, languages, last_enqueued_at, created_at, updated_at`,
+		rec.WorkID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.ProfileID, rec.IgnoreUpgrades, rec.Formats, rec.Languages,
 	)
 	updated, err := scanWantedWorkRow(row)
 	if err != nil {
@@ -514,7 +519,7 @@ func (s *PGStore) SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error) 
 
 func (s *PGStore) ListWantedWorks() []WantedWorkRecord {
 	rows, err := s.db.Query(context.Background(), `
-		SELECT work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		SELECT work_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), ignore_upgrades, formats, languages, last_enqueued_at, created_at, updated_at
 		FROM indexer_wanted_works
 		ORDER BY priority ASC, work_id ASC`)
 	if err != nil {
@@ -545,7 +550,7 @@ func (s *PGStore) DeleteWantedWork(workID string) error {
 
 func (s *PGStore) ListDueWantedWorks(now time.Time) []WantedWorkRecord {
 	rows, err := s.db.Query(context.Background(), `
-		SELECT work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		SELECT work_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), ignore_upgrades, formats, languages, last_enqueued_at, created_at, updated_at
 		FROM indexer_wanted_works
 		WHERE enabled=true
 		  AND (
@@ -583,20 +588,24 @@ func (s *PGStore) MarkWantedWorkEnqueued(workID string, now time.Time) error {
 }
 
 func (s *PGStore) SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, error) {
+	if rec.ProfileID == "" {
+		rec.ProfileID = s.GetDefaultProfileID()
+	}
 	row := s.db.QueryRow(context.Background(), `
 		INSERT INTO indexer_wanted_authors
-			(author_id, enabled, priority, cadence_minutes, formats, languages, created_at, updated_at)
+			(author_id, enabled, priority, cadence_minutes, profile_id, formats, languages, created_at, updated_at)
 		VALUES
-			($1,$2,$3,$4,$5,$6,NOW(),NOW())
+			($1,$2,$3,$4,$5,$6,$7,NOW(),NOW())
 		ON CONFLICT (author_id) DO UPDATE SET
 			enabled=EXCLUDED.enabled,
 			priority=EXCLUDED.priority,
 			cadence_minutes=EXCLUDED.cadence_minutes,
+			profile_id=EXCLUDED.profile_id,
 			formats=EXCLUDED.formats,
 			languages=EXCLUDED.languages,
 			updated_at=NOW()
-		RETURNING author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at`,
-		rec.AuthorID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.Formats, rec.Languages,
+		RETURNING author_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), formats, languages, last_enqueued_at, created_at, updated_at`,
+		rec.AuthorID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.ProfileID, rec.Formats, rec.Languages,
 	)
 	updated, err := scanWantedAuthorRow(row)
 	if err != nil {
@@ -607,7 +616,7 @@ func (s *PGStore) SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, e
 
 func (s *PGStore) ListWantedAuthors() []WantedAuthorRecord {
 	rows, err := s.db.Query(context.Background(), `
-		SELECT author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		SELECT author_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), formats, languages, last_enqueued_at, created_at, updated_at
 		FROM indexer_wanted_authors
 		ORDER BY priority ASC, author_id ASC`)
 	if err != nil {
@@ -638,7 +647,7 @@ func (s *PGStore) DeleteWantedAuthor(authorID string) error {
 
 func (s *PGStore) ListDueWantedAuthors(now time.Time) []WantedAuthorRecord {
 	rows, err := s.db.Query(context.Background(), `
-		SELECT author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		SELECT author_id, enabled, priority, cadence_minutes, COALESCE(profile_id,''), formats, languages, last_enqueued_at, created_at, updated_at
 		FROM indexer_wanted_authors
 		WHERE enabled=true
 		  AND (
@@ -819,6 +828,147 @@ func (s *PGStore) RecomputeReliability() error {
 	return nil
 }
 
+func (s *PGStore) ListProfiles() []ProfileWithQualities {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT id, name, cutoff_quality, default_profile, created_at, updated_at
+		FROM indexer_profiles
+		ORDER BY default_profile DESC, name ASC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]ProfileWithQualities, 0)
+	for rows.Next() {
+		var rec ProfileRecord
+		if err := rows.Scan(&rec.ID, &rec.Name, &rec.CutoffQuality, &rec.DefaultProfile, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			continue
+		}
+		qRows, qErr := s.db.Query(context.Background(), `
+			SELECT profile_id, quality, rank
+			FROM indexer_profile_qualities
+			WHERE profile_id=$1
+			ORDER BY rank ASC`, rec.ID)
+		if qErr != nil {
+			continue
+		}
+		qualities := make([]ProfileQualityRecord, 0)
+		for qRows.Next() {
+			var q ProfileQualityRecord
+			if err := qRows.Scan(&q.ProfileID, &q.Quality, &q.Rank); err != nil {
+				continue
+			}
+			qualities = append(qualities, q)
+		}
+		qRows.Close()
+		out = append(out, ProfileWithQualities{Profile: rec, Qualities: qualities})
+	}
+	return out
+}
+
+func (s *PGStore) UpsertProfile(profile ProfileRecord, qualities []ProfileQualityRecord) (ProfileWithQualities, error) {
+	tx, err := s.db.Begin(context.Background())
+	if err != nil {
+		return ProfileWithQualities{}, err
+	}
+	defer tx.Rollback(context.Background())
+
+	if profile.ID == "" {
+		return ProfileWithQualities{}, ErrNotFound
+	}
+	if profile.Name == "" {
+		profile.Name = profile.ID
+	}
+	if profile.CutoffQuality == "" {
+		profile.CutoffQuality = "epub"
+	}
+	if profile.DefaultProfile {
+		if _, err := tx.Exec(context.Background(), `UPDATE indexer_profiles SET default_profile=FALSE WHERE default_profile=TRUE`); err != nil {
+			return ProfileWithQualities{}, err
+		}
+	}
+	row := tx.QueryRow(context.Background(), `
+		INSERT INTO indexer_profiles (id, name, cutoff_quality, default_profile, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,NOW(),NOW())
+		ON CONFLICT (id) DO UPDATE SET
+			name=EXCLUDED.name,
+			cutoff_quality=EXCLUDED.cutoff_quality,
+			default_profile=EXCLUDED.default_profile,
+			updated_at=NOW()
+		RETURNING id, name, cutoff_quality, default_profile, created_at, updated_at`,
+		profile.ID, profile.Name, profile.CutoffQuality, profile.DefaultProfile,
+	)
+	if err := row.Scan(&profile.ID, &profile.Name, &profile.CutoffQuality, &profile.DefaultProfile, &profile.CreatedAt, &profile.UpdatedAt); err != nil {
+		return ProfileWithQualities{}, err
+	}
+	if _, err := tx.Exec(context.Background(), `DELETE FROM indexer_profile_qualities WHERE profile_id=$1`, profile.ID); err != nil {
+		return ProfileWithQualities{}, err
+	}
+	if len(qualities) == 0 {
+		qualities = []ProfileQualityRecord{
+			{ProfileID: profile.ID, Quality: "epub", Rank: 1},
+			{ProfileID: profile.ID, Quality: "azw3", Rank: 2},
+			{ProfileID: profile.ID, Quality: "mobi", Rank: 3},
+			{ProfileID: profile.ID, Quality: "pdf", Rank: 4},
+		}
+	}
+	for i := range qualities {
+		if qualities[i].Rank <= 0 {
+			qualities[i].Rank = i + 1
+		}
+		qualities[i].ProfileID = profile.ID
+		if _, err := tx.Exec(context.Background(), `
+			INSERT INTO indexer_profile_qualities (profile_id, quality, rank)
+			VALUES ($1,$2,$3)`, profile.ID, qualities[i].Quality, qualities[i].Rank); err != nil {
+			return ProfileWithQualities{}, err
+		}
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		return ProfileWithQualities{}, err
+	}
+	return ProfileWithQualities{Profile: profile, Qualities: qualities}, nil
+}
+
+func (s *PGStore) DeleteProfile(id string) error {
+	defaultID := s.GetDefaultProfileID()
+	if id == defaultID {
+		return fmt.Errorf("cannot delete default profile")
+	}
+	tx, err := s.db.Begin(context.Background())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	tag, err := tx.Exec(context.Background(), `DELETE FROM indexer_profiles WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	if defaultID != "" {
+		if _, err := tx.Exec(context.Background(), `UPDATE indexer_wanted_works SET profile_id=$1 WHERE profile_id=$2`, defaultID, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(context.Background(), `UPDATE indexer_wanted_authors SET profile_id=$1 WHERE profile_id=$2`, defaultID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(context.Background())
+}
+
+func (s *PGStore) GetDefaultProfileID() string {
+	row := s.db.QueryRow(context.Background(), `SELECT id FROM indexer_profiles WHERE default_profile=TRUE ORDER BY id LIMIT 1`)
+	var id string
+	if err := row.Scan(&id); err == nil {
+		return id
+	}
+	row = s.db.QueryRow(context.Background(), `SELECT id FROM indexer_profiles ORDER BY id LIMIT 1`)
+	if err := row.Scan(&id); err == nil {
+		return id
+	}
+	return ""
+}
+
 type scanRow interface {
 	Scan(dest ...any) error
 }
@@ -861,6 +1011,8 @@ func scanWantedWorkRow(row scanRow) (WantedWorkRecord, error) {
 		&rec.Enabled,
 		&rec.Priority,
 		&rec.CadenceMinutes,
+		&rec.ProfileID,
+		&rec.IgnoreUpgrades,
 		&rec.Formats,
 		&rec.Languages,
 		&rec.LastEnqueuedAt,
@@ -888,6 +1040,7 @@ func scanWantedAuthorRow(row scanRow) (WantedAuthorRecord, error) {
 		&rec.Enabled,
 		&rec.Priority,
 		&rec.CadenceMinutes,
+		&rec.ProfileID,
 		&rec.Formats,
 		&rec.Languages,
 		&rec.LastEnqueuedAt,

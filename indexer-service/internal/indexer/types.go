@@ -185,6 +185,8 @@ type WantedWorkRecord struct {
 	Enabled        bool       `json:"enabled"`
 	Priority       int        `json:"priority"`
 	CadenceMinutes int        `json:"cadence_minutes"`
+	ProfileID      string     `json:"profile_id,omitempty"`
+	IgnoreUpgrades bool       `json:"ignore_upgrades,omitempty"`
 	Formats        []string   `json:"formats,omitempty"`
 	Languages      []string   `json:"languages,omitempty"`
 	LastEnqueuedAt *time.Time `json:"last_enqueued_at,omitempty"`
@@ -197,9 +199,30 @@ type WantedAuthorRecord struct {
 	Enabled        bool       `json:"enabled"`
 	Priority       int        `json:"priority"`
 	CadenceMinutes int        `json:"cadence_minutes"`
+	ProfileID      string     `json:"profile_id,omitempty"`
 	Formats        []string   `json:"formats,omitempty"`
 	Languages      []string   `json:"languages,omitempty"`
 	LastEnqueuedAt *time.Time `json:"last_enqueued_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type ProfileRecord struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	CutoffQuality  string    `json:"cutoff_quality"`
+	DefaultProfile bool      `json:"default_profile"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type ProfileQualityRecord struct {
+	ProfileID string `json:"profile_id"`
+	Quality   string `json:"quality"`
+	Rank      int    `json:"rank"`
+}
+
+type ProfileWithQualities struct {
+	Profile   ProfileRecord          `json:"profile"`
+	Qualities []ProfileQualityRecord `json:"qualities"`
 }

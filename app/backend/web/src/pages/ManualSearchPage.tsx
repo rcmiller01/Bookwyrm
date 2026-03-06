@@ -238,7 +238,7 @@ export function ManualSearchPage() {
 
         {searchRequestID ? (
           <p className="mt-2 text-xs text-slate-400">
-            Stop condition: {aboveThresholdCount} candidate(s) ≥ {minScoreThreshold.toFixed(2)} / required {minCandidates} ({stopConditionMet ? 'met' : 'not met'})
+            Stop condition: {aboveThresholdCount} candidate(s) {">="} {minScoreThreshold.toFixed(2)} / required {minCandidates} ({stopConditionMet ? 'met' : 'not met'})
           </p>
         ) : null}
       </div>
@@ -284,7 +284,7 @@ export function ManualSearchPage() {
                             onClick={() => preferredMutation.mutate({ id: backend.id, preferred: !preferred })}
                             title="Toggle preferred source"
                           >
-                            ♥
+                            Fav
                           </button>
                         ) : null}
                       </div>
@@ -334,3 +334,5 @@ export function ManualSearchPage() {
     </section>
   )
 }
+
+

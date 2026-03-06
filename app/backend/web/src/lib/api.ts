@@ -57,3 +57,16 @@ export async function patchJSON<T>(path: string, body: unknown): Promise<T> {
   }
   return (await response.json()) as T
 }
+
+export async function deleteNoContent(path: string): Promise<void> {
+  const response = await fetch(path, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json'
+    }
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Request failed (${response.status}): ${text || response.statusText}`)
+  }
+}

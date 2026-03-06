@@ -40,6 +40,11 @@ type Storage interface {
 	MarkWantedAuthorEnqueued(authorID string, now time.Time) error
 	PruneStaleCandidates(maxPerRequest int) (int, error)
 
+	ListProfiles() []ProfileWithQualities
+	UpsertProfile(profile ProfileRecord, qualities []ProfileQualityRecord) (ProfileWithQualities, error)
+	DeleteProfile(id string) error
+	GetDefaultProfileID() string
+
 	RecordBackendSearchResult(backendID string, success bool, latency time.Duration, yielded bool) error
 	RecomputeReliability() error
 }

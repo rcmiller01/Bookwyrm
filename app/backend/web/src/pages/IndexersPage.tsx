@@ -1,5 +1,10 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FilterBar } from '../components/FilterBar'
+import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
+import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
 
 type BackendRecord = {
@@ -21,11 +26,15 @@ function preferred(rec: BackendRecord): boolean {
 export function IndexersPage() {
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
+  const [query, setQuery] = useLocalStorageState<string>('settings.indexers.query', '')
+  const [stageMinCandidates, setStageMinCandidates] = useLocalStorageState<number>('settings.indexers.stage.minCandidates', 10)
+  const [stageScoreThreshold, setStageScoreThreshold] = useLocalStorageState<number>('settings.indexers.stage.score', 0.75)
+  const [stageTimeoutSec, setStageTimeoutSec] = useLocalStorageState<number>('settings.indexers.stage.timeout', 45)
 
   const backendsQuery = useQuery({
     queryKey: ['settings', 'indexers', 'backends'],
     queryFn: () => fetchJSON<BackendsResponse>('/ui-api/indexer/backends/reliability'),
-    refetchInterval: 10000
+    refetchInterval: 15000
   })
 
   const mutation = useMutation({
@@ -53,18 +62,57 @@ export function IndexersPage() {
     onError: (error) => pushToast((error as Error).message)
   })
 
-  const rows = backendsQuery.data?.backends ?? []
+  const rows = useMemo(() => {
+    const lowered = query.trim().toLowerCase()
+    return (backendsQuery.data?.backends ?? []).filter((row) => {
+      if (!lowered) return true
+      return row.name.toLowerCase().includes(lowered) || row.id.toLowerCase().includes(lowered)
+    })
+  }, [backendsQuery.data?.backends, query])
 
   return (
     <section className="space-y-4">
-      <header>
-        <h2 className="text-2xl font-semibold text-slate-100">Indexers</h2>
-        <p className="text-sm text-slate-400">Manage backend state, priority, reliability, and preferred source hearting.</p>
-      </header>
+      <PageHeader
+        title="Indexers"
+        subtitle="Preferred sources, backend reliability, and staged search controls."
+        actions={
+          <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void backendsQuery.refetch()}>
+            Refresh
+          </button>
+        }
+      />
 
       <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
-        Ordering rule: preferred (hearted) backends are searched before non-preferred backends, then tier/reliability/priority applies.
+        Ordering rule: preferred backends run first, then tier/reliability/priority.
       </div>
+
+      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Staged Search Controls</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-sm text-slate-300">
+            Min candidates
+            <input type="number" min={1} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={stageMinCandidates} onChange={(e) => setStageMinCandidates(Math.max(1, Number(e.target.value) || 1))} />
+          </label>
+          <label className="text-sm text-slate-300">
+            Score threshold
+            <input type="number" min={0} max={1} step="0.01" className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={stageScoreThreshold} onChange={(e) => setStageScoreThreshold(Math.min(1, Math.max(0, Number(e.target.value) || 0)))} />
+          </label>
+          <label className="text-sm text-slate-300">
+            Stage timeout (sec)
+            <input type="number" min={5} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={stageTimeoutSec} onChange={(e) => setStageTimeoutSec(Math.max(5, Number(e.target.value) || 5))} />
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">Example behavior: stop after {stageMinCandidates} results or score {'>='} {stageScoreThreshold.toFixed(2)} within {stageTimeoutSec}s.</p>
+      </div>
+
+      <FilterBar>
+        <input
+          className="w-64 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+          placeholder="Filter backends"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </FilterBar>
 
       <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/50">
         <table className="w-full text-left text-sm">
@@ -83,8 +131,8 @@ export function IndexersPage() {
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-slate-800 text-slate-100">
                 <td className="px-3 py-2">{row.name}</td>
-                <td className="px-3 py-2">{row.enabled ? 'yes' : 'no'}</td>
-                <td className="px-3 py-2">{preferred(row) ? '♥' : '-'}</td>
+                <td className="px-3 py-2">{row.enabled ? <StatusBadge label="Enabled" /> : <StatusBadge label="Disabled" />}</td>
+                <td className="px-3 py-2">{preferred(row) ? 'Yes' : 'No'}</td>
                 <td className="px-3 py-2">{row.priority}</td>
                 <td className="px-3 py-2">{row.reliability_score.toFixed(2)}</td>
                 <td className="px-3 py-2">{row.tier}</td>
@@ -94,13 +142,13 @@ export function IndexersPage() {
                       {row.enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button className="rounded border border-amber-700 px-2 py-1 text-xs text-amber-300" onClick={() => mutation.mutate({ type: 'preferred', id: row.id, value: !preferred(row) })}>
-                      {preferred(row) ? 'Unheart' : 'Heart'}
-                    </button>
-                    <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => mutation.mutate({ type: 'priority', id: row.id, value: row.priority + 10 })}>
-                      +Priority
+                      {preferred(row) ? 'Unfavorite' : 'Favorite'}
                     </button>
                     <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => mutation.mutate({ type: 'priority', id: row.id, value: Math.max(1, row.priority - 10) })}>
-                      -Priority
+                      Higher
+                    </button>
+                    <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => mutation.mutate({ type: 'priority', id: row.id, value: row.priority + 10 })}>
+                      Lower
                     </button>
                   </div>
                 </td>

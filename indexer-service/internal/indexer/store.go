@@ -29,6 +29,8 @@ type Store struct {
 	wantedWorks     map[string]WantedWorkRecord
 	wantedAuthors   map[string]WantedAuthorRecord
 	backendMetrics  map[string]indexerMetrics
+	profiles        map[string]ProfileRecord
+	profileQuality  map[string][]ProfileQualityRecord
 }
 
 type indexerMetrics struct {
@@ -54,6 +56,24 @@ func NewStore() *Store {
 		wantedWorks:     map[string]WantedWorkRecord{},
 		wantedAuthors:   map[string]WantedAuthorRecord{},
 		backendMetrics:  map[string]indexerMetrics{},
+		profiles: map[string]ProfileRecord{
+			"default-ebook": {
+				ID:             "default-ebook",
+				Name:           "Default Ebook",
+				CutoffQuality:  "epub",
+				DefaultProfile: true,
+				CreatedAt:      time.Now().UTC(),
+				UpdatedAt:      time.Now().UTC(),
+			},
+		},
+		profileQuality: map[string][]ProfileQualityRecord{
+			"default-ebook": {
+				{ProfileID: "default-ebook", Quality: "epub", Rank: 1},
+				{ProfileID: "default-ebook", Quality: "azw3", Rank: 2},
+				{ProfileID: "default-ebook", Quality: "mobi", Rank: 3},
+				{ProfileID: "default-ebook", Quality: "pdf", Rank: 4},
+			},
+		},
 	}
 }
 
@@ -476,6 +496,9 @@ func (s *Store) SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error) {
 	if rec.CadenceMinutes <= 0 {
 		rec.CadenceMinutes = 60
 	}
+	if strings.TrimSpace(rec.ProfileID) == "" {
+		rec.ProfileID = s.defaultProfileIDLocked()
+	}
 	s.wantedWorks[rec.WorkID] = rec
 	return rec, nil
 }
@@ -558,6 +581,9 @@ func (s *Store) SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, err
 	rec.UpdatedAt = now
 	if rec.CadenceMinutes <= 0 {
 		rec.CadenceMinutes = 60
+	}
+	if strings.TrimSpace(rec.ProfileID) == "" {
+		rec.ProfileID = s.defaultProfileIDLocked()
 	}
 	s.wantedAuthors[rec.AuthorID] = rec
 	return rec, nil
@@ -706,6 +732,122 @@ func (s *Store) RecomputeReliability() error {
 		s.backends[backendID] = rec
 	}
 	return nil
+}
+
+func (s *Store) ListProfiles() []ProfileWithQualities {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ProfileWithQualities, 0, len(s.profiles))
+	for id, profile := range s.profiles {
+		qualities := append([]ProfileQualityRecord(nil), s.profileQuality[id]...)
+		sort.SliceStable(qualities, func(i, j int) bool { return qualities[i].Rank < qualities[j].Rank })
+		out = append(out, ProfileWithQualities{Profile: profile, Qualities: qualities})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Profile.DefaultProfile != out[j].Profile.DefaultProfile {
+			return out[i].Profile.DefaultProfile
+		}
+		return out[i].Profile.Name < out[j].Profile.Name
+	})
+	return out
+}
+
+func (s *Store) UpsertProfile(profile ProfileRecord, qualities []ProfileQualityRecord) (ProfileWithQualities, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := strings.TrimSpace(profile.ID)
+	if id == "" {
+		return ProfileWithQualities{}, ErrNotFound
+	}
+	now := time.Now().UTC()
+	existing, ok := s.profiles[id]
+	if ok {
+		profile.CreatedAt = existing.CreatedAt
+	} else {
+		profile.CreatedAt = now
+	}
+	if strings.TrimSpace(profile.Name) == "" {
+		profile.Name = id
+	}
+	if strings.TrimSpace(profile.CutoffQuality) == "" {
+		profile.CutoffQuality = "epub"
+	}
+	if profile.DefaultProfile {
+		for k, rec := range s.profiles {
+			rec.DefaultProfile = false
+			s.profiles[k] = rec
+		}
+	}
+	profile.UpdatedAt = now
+	s.profiles[id] = profile
+
+	if len(qualities) == 0 {
+		qualities = []ProfileQualityRecord{
+			{ProfileID: id, Quality: "epub", Rank: 1},
+			{ProfileID: id, Quality: "azw3", Rank: 2},
+			{ProfileID: id, Quality: "mobi", Rank: 3},
+			{ProfileID: id, Quality: "pdf", Rank: 4},
+		}
+	}
+	for i := range qualities {
+		qualities[i].ProfileID = id
+		if qualities[i].Rank <= 0 {
+			qualities[i].Rank = i + 1
+		}
+	}
+	sort.SliceStable(qualities, func(i, j int) bool { return qualities[i].Rank < qualities[j].Rank })
+	s.profileQuality[id] = append([]ProfileQualityRecord(nil), qualities...)
+	return ProfileWithQualities{Profile: profile, Qualities: append([]ProfileQualityRecord(nil), qualities...)}, nil
+}
+
+func (s *Store) DeleteProfile(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id = strings.TrimSpace(id)
+	profile, ok := s.profiles[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if profile.DefaultProfile {
+		return errors.New("cannot delete default profile")
+	}
+	delete(s.profiles, id)
+	delete(s.profileQuality, id)
+	defaultID := s.defaultProfileIDLocked()
+	for key, rec := range s.wantedWorks {
+		if rec.ProfileID == id {
+			rec.ProfileID = defaultID
+			s.wantedWorks[key] = rec
+		}
+	}
+	for key, rec := range s.wantedAuthors {
+		if rec.ProfileID == id {
+			rec.ProfileID = defaultID
+			s.wantedAuthors[key] = rec
+		}
+	}
+	return nil
+}
+
+func (s *Store) GetDefaultProfileID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.defaultProfileIDLocked()
+}
+
+func (s *Store) defaultProfileIDLocked() string {
+	for _, rec := range s.profiles {
+		if rec.DefaultProfile {
+			return rec.ID
+		}
+	}
+	if _, ok := s.profiles["default-ebook"]; ok {
+		return "default-ebook"
+	}
+	for id := range s.profiles {
+		return id
+	}
+	return ""
 }
 
 func tierForReliability(score float64) DispatchTier {

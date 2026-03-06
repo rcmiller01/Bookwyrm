@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
+import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
 
 type ImportJob = {
@@ -23,6 +26,15 @@ type ImportJobDetailResponse = { job: ImportJob; events: unknown[] }
 
 const DECISIONS = ['keep_both', 'replace_existing', 'skip'] as const
 
+function reasonLabel(value?: string): string {
+  const text = (value || '').toLowerCase()
+  if (text.includes('collision')) return 'Collision'
+  if (text.includes('confidence')) return 'Low confidence match'
+  if (text.includes('ambiguous')) return 'Ambiguous match'
+  if (text.includes('isbn')) return 'Ambiguous ISBN'
+  return value?.trim() || 'Needs review'
+}
+
 export function ImportListPage() {
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
@@ -31,11 +43,12 @@ export function ImportListPage() {
   const [approveEditionID, setApproveEditionID] = useState('')
   const [decideAction, setDecideAction] = useState<(typeof DECISIONS)[number]>('keep_both')
   const [confirmSkip, setConfirmSkip] = useState(false)
+  const [query, setQuery] = useLocalStorageState<string>('import.review.query', '')
 
   const listQuery = useQuery({
     queryKey: ['activity', 'import-needs-review'],
     queryFn: () => fetchJSON<ImportJobsResponse>('/api/v1/import/jobs?status=needs_review&limit=200'),
-    refetchInterval: 5000
+    refetchInterval: 15000
   })
 
   const selectedJob = useMemo(
@@ -98,27 +111,52 @@ export function ImportListPage() {
     onError: (error) => pushToast((error as Error).message)
   })
 
+  const filtered = useMemo(() => {
+    const lowered = query.trim().toLowerCase()
+    if (!lowered) return listQuery.data?.items ?? []
+    return (listQuery.data?.items ?? []).filter((job) => {
+      return (
+        String(job.id).includes(lowered) ||
+        (job.work_id || '').toLowerCase().includes(lowered) ||
+        (job.source_path || '').toLowerCase().includes(lowered) ||
+        reasonLabel(job.last_error).toLowerCase().includes(lowered)
+      )
+    })
+  }, [listQuery.data?.items, query])
+
+  const decisionContext = detailQuery.data?.job.decision_json ?? selectedJob?.decision_json ?? {}
+  const namingPreview = detailQuery.data?.job.naming_result_json ?? selectedJob?.naming_result_json ?? {}
+
   return (
     <section className="space-y-4">
-      <header>
-        <h2 className="text-2xl font-semibold text-slate-100">Import List</h2>
-        <p className="text-sm text-slate-400">Review and resolve imports requiring operator decisions.</p>
-      </header>
+      <PageHeader
+        title="Import Needs Review"
+        subtitle="Resolve collisions and low-confidence matches quickly."
+      />
+
+      <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
+        <input
+          className="w-full max-w-sm rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+          placeholder="Filter by id, work, reason, source path"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/50">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded border border-slate-800 bg-slate-900/50">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-slate-900 text-slate-300">
               <tr>
                 <th className="px-3 py-2">ID</th>
                 <th className="px-3 py-2">Work</th>
-                <th className="px-3 py-2">Source Path</th>
                 <th className="px-3 py-2">Reason</th>
-                <th className="px-3 py-2">Updated</th>
+                <th className="hidden md:table-cell px-3 py-2">Source Path</th>
+                <th className="hidden md:table-cell px-3 py-2">Updated</th>
               </tr>
             </thead>
             <tbody>
-              {(listQuery.data?.items ?? []).map((job) => (
+              {filtered.map((job) => (
                 <tr
                   key={job.id}
                   className={[
@@ -132,17 +170,13 @@ export function ImportListPage() {
                   }}
                 >
                   <td className="px-3 py-2">{job.id}</td>
-                  <td className="px-3 py-2">{job.work_id || '-'}</td>
-                  <td className="max-w-xs truncate px-3 py-2" title={job.source_path}>
-                    {job.source_path}
-                  </td>
-                  <td className="max-w-xs truncate px-3 py-2 text-slate-300" title={job.last_error || ''}>
-                    {job.last_error || '-'}
-                  </td>
-                  <td className="px-3 py-2 text-slate-300">{new Date(job.updated_at).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-slate-300">{job.work_id || '-'}</td>
+                  <td className="px-3 py-2"><StatusBadge label={reasonLabel(job.last_error)} /></td>
+                  <td className="hidden md:table-cell max-w-xs truncate px-3 py-2 text-slate-300" title={job.source_path}>{job.source_path}</td>
+                  <td className="hidden md:table-cell px-3 py-2 text-slate-300">{new Date(job.updated_at).toLocaleString()}</td>
                 </tr>
               ))}
-              {(listQuery.data?.items ?? []).length === 0 ? (
+              {filtered.length === 0 ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-slate-400" colSpan={5}>
                     No needs_review import jobs.
@@ -162,11 +196,12 @@ export function ImportListPage() {
               <p className="text-slate-300">Job #{selectedJob.id}</p>
               <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
                 <p className="text-xs uppercase text-slate-400">Naming preview</p>
-                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(detailQuery.data?.job.naming_result_json ?? selectedJob.naming_result_json ?? {}, null, 2)}</pre>
+                <p className="mt-1 text-xs text-slate-300">Final path: {selectedJob.target_path || '(pending)'} </p>
+                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(namingPreview, null, 2)}</pre>
               </div>
               <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
-                <p className="text-xs uppercase text-slate-400">Decision context</p>
-                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(detailQuery.data?.job.decision_json ?? selectedJob.decision_json ?? {}, null, 2)}</pre>
+                <p className="text-xs uppercase text-slate-400">Candidate comparison context</p>
+                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(decisionContext, null, 2)}</pre>
               </div>
 
               <label className="block">
@@ -224,6 +259,17 @@ export function ImportListPage() {
                   onClick={() => decideMutation.mutate({ id: selectedJob.id, action: decideAction })}
                 >
                   Apply Decision
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="rounded bg-emerald-700 px-2 py-1 text-xs text-white" onClick={() => decideMutation.mutate({ id: selectedJob.id, action: 'replace_existing' })}>
+                  Replace Existing
+                </button>
+                <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => decideMutation.mutate({ id: selectedJob.id, action: 'keep_both' })}>
+                  Keep Both
+                </button>
+                <button className="rounded border border-red-700 px-2 py-1 text-xs text-red-300" onClick={() => decideMutation.mutate({ id: selectedJob.id, action: 'skip' })}>
+                  Skip
                 </button>
               </div>
             </div>

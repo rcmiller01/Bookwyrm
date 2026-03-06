@@ -1,5 +1,10 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FilterBar } from '../components/FilterBar'
+import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
+import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, patchJSON } from '../lib/api'
 
 type DownloadClient = {
@@ -17,11 +22,12 @@ type DownloadClientsResponse = { items: DownloadClient[] }
 export function DownloadClientsPage() {
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
+  const [query, setQuery] = useLocalStorageState<string>('settings.clients.query', '')
 
   const clientsQuery = useQuery({
     queryKey: ['settings', 'download-clients'],
     queryFn: () => fetchJSON<DownloadClientsResponse>('/api/v1/download/clients'),
-    refetchInterval: 10000
+    refetchInterval: 15000
   })
 
   const updateMutation = useMutation({
@@ -38,14 +44,34 @@ export function DownloadClientsPage() {
     onError: (error) => pushToast((error as Error).message)
   })
 
-  const rows = clientsQuery.data?.items ?? []
+  const rows = useMemo(() => {
+    const lowered = query.trim().toLowerCase()
+    return (clientsQuery.data?.items ?? []).filter((row) => {
+      if (!lowered) return true
+      return row.name.toLowerCase().includes(lowered) || row.client_type.toLowerCase().includes(lowered)
+    })
+  }, [clientsQuery.data?.items, query])
 
   return (
     <section className="space-y-4">
-      <header>
-        <h2 className="text-2xl font-semibold text-slate-100">Download Clients</h2>
-        <p className="text-sm text-slate-400">Enable/disable clients and adjust scheduling priority.</p>
-      </header>
+      <PageHeader
+        title="Download Clients"
+        subtitle="Enable clients, tune priority, and verify runtime health signals."
+        actions={
+          <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void clientsQuery.refetch()}>
+            Test/Refresh
+          </button>
+        }
+      />
+
+      <FilterBar>
+        <input
+          className="w-64 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+          placeholder="Filter clients"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </FilterBar>
 
       <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/50">
         <table className="w-full text-left text-sm">
@@ -65,7 +91,7 @@ export function DownloadClientsPage() {
               <tr key={row.id} className="border-t border-slate-800 text-slate-100">
                 <td className="px-3 py-2">{row.name}</td>
                 <td className="px-3 py-2">{row.client_type}</td>
-                <td className="px-3 py-2">{row.enabled ? 'yes' : 'no'}</td>
+                <td className="px-3 py-2">{row.enabled ? <StatusBadge label="Enabled" /> : <StatusBadge label="Disabled" />}</td>
                 <td className="px-3 py-2">{row.priority}</td>
                 <td className="px-3 py-2">{row.reliability_score.toFixed(2)}</td>
                 <td className="px-3 py-2">{row.tier}</td>
@@ -81,13 +107,13 @@ export function DownloadClientsPage() {
                       className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"
                       onClick={() => updateMutation.mutate({ id: row.id, priority: Math.max(1, row.priority - 10) })}
                     >
-                      -Priority
+                      Higher
                     </button>
                     <button
                       className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"
                       onClick={() => updateMutation.mutate({ id: row.id, priority: row.priority + 10 })}
                     >
-                      +Priority
+                      Lower
                     </button>
                   </div>
                 </td>

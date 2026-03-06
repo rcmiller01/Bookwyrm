@@ -295,7 +295,7 @@ func TestWantedWorkEndpoints(t *testing.T) {
 	h := testHandlers()
 	r := NewRouter(h)
 
-	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/works/work-123", bytes.NewBufferString(`{"enabled":true,"priority":12,"cadence_minutes":45,"formats":["epub"],"languages":["en"]}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/works/work-123", bytes.NewBufferString(`{"enabled":true,"priority":12,"cadence_minutes":45,"profile_id":"default-ebook","formats":["epub"],"languages":["en"]}`))
 	putRes := httptest.NewRecorder()
 	r.ServeHTTP(putRes, putReq)
 	if putRes.Code != http.StatusOK {
@@ -329,7 +329,7 @@ func TestWantedAuthorEndpoints(t *testing.T) {
 	h := testHandlers()
 	r := NewRouter(h)
 
-	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/authors/author-123", bytes.NewBufferString(`{"enabled":true,"priority":22,"cadence_minutes":30}`))
+	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/authors/author-123", bytes.NewBufferString(`{"enabled":true,"priority":22,"cadence_minutes":30,"profile_id":"default-ebook"}`))
 	putRes := httptest.NewRecorder()
 	r.ServeHTTP(putRes, putReq)
 	if putRes.Code != http.StatusOK {
@@ -356,6 +356,68 @@ func TestWantedAuthorEndpoints(t *testing.T) {
 	r.ServeHTTP(delRes, delReq)
 	if delRes.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 delete wanted author, got %d", delRes.Code)
+	}
+}
+
+func TestProfilesEndpoints(t *testing.T) {
+	h := testHandlers()
+	r := NewRouter(h)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/v1/indexer/profiles", bytes.NewBufferString(`{
+		"id":"audio-main",
+		"name":"Audio Main",
+		"cutoff_quality":"m4b",
+		"qualities":[{"quality":"m4b","rank":1},{"quality":"mp3","rank":2}]
+	}`))
+	createRes := httptest.NewRecorder()
+	r.ServeHTTP(createRes, createReq)
+	if createRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 create profile, got %d", createRes.Code)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/v1/indexer/profiles", nil)
+	listRes := httptest.NewRecorder()
+	r.ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 list profiles, got %d", listRes.Code)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(listRes.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode profiles failed: %v", err)
+	}
+	items, _ := payload["items"].([]any)
+	if len(items) == 0 {
+		t.Fatalf("expected profiles list")
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/v1/indexer/profiles/audio-main", nil)
+	deleteRes := httptest.NewRecorder()
+	r.ServeHTTP(deleteRes, deleteReq)
+	if deleteRes.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 delete profile, got %d", deleteRes.Code)
+	}
+}
+
+func TestBulkSearchEndpoint(t *testing.T) {
+	h := testHandlers()
+	r := NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/indexer/search/bulk", bytes.NewBufferString(`{
+		"items":[
+			{"entity_type":"work","entity_id":"work-1","title":"Dune"},
+			{"entity_type":"work","entity_id":"work-2","title":"Hyperion"}
+		]
+	}`))
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200 bulk search, got %d", res.Code)
+	}
+	var payload map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&payload)
+	items, _ := payload["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 bulk search requests, got %d", len(items))
 	}
 }
 
