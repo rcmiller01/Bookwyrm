@@ -89,12 +89,14 @@ func (c *NZBGetClient) GetStatus(ctx context.Context, downloadID string) (Downlo
 			progress = (downloaded / total) * 100.0
 		}
 		state := normalizeNZBGetState(toString(group["Status"]), progress)
+		outputPath := firstNonEmpty(toString(group["DestDir"]), toString(group["FinalDir"]), toString(group["Directory"]))
 		return DownloadStatus{
-			Client:   c.Name(),
-			ID:       id,
-			State:    state,
-			Progress: progress,
-			Raw:      group,
+			Client:     c.Name(),
+			ID:         id,
+			State:      state,
+			Progress:   progress,
+			OutputPath: outputPath,
+			Raw:        group,
 		}, nil
 	}
 	return DownloadStatus{}, ErrDownloadNotFound
@@ -168,13 +170,26 @@ func normalizeNZBGetState(status string, progress float64) string {
 	switch {
 	case strings.Contains(lower, "failure"):
 		return "failed"
+	case strings.Contains(lower, "repair"):
+		return "repairing"
+	case strings.Contains(lower, "unpack"):
+		return "unpacking"
 	case strings.Contains(lower, "paused"):
-		return "paused"
+		return "submitted"
 	case strings.Contains(lower, "success") || progress >= 100:
 		return "completed"
 	default:
 		return "downloading"
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func atoiSafe(v string) int {

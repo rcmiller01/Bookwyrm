@@ -2,17 +2,21 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"app-backend/internal/api"
+	"app-backend/internal/downloadqueue"
 	"app-backend/internal/integration/download"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
 	"app-backend/internal/jobs"
 	"app-backend/internal/store"
+
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -30,6 +34,7 @@ func main() {
 	nzbgetUser := os.Getenv("NZBGET_USERNAME")
 	nzbgetPass := os.Getenv("NZBGET_PASSWORD")
 	nzbgetCategory := envOrDefault("NZBGET_CATEGORY", "books")
+	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 
 	metaClient := metadata.NewClient(metadata.Config{
@@ -69,6 +74,11 @@ func main() {
 			Timeout:  10 * time.Second,
 		}))
 	}
+	downloadStore, closeDownloadStore := initDownloadStore(databaseDSN)
+	defer closeDownloadStore()
+	seedDownloadClients(downloadStore, qbitURL != "", sabURL != "", nzbgetURL != "")
+	downloadManager := downloadqueue.NewManager(downloadStore, downloadService, indexerClient)
+	downloadManager.Start(context.Background())
 
 	jobStore := store.NewInMemoryJobStore()
 	jobService := jobs.NewService(
@@ -84,6 +94,7 @@ func main() {
 
 	h := api.NewHandlers(metaClient, indexerClient, store.NewInMemoryWatchlistStore())
 	h.SetJobService(jobService)
+	h.SetDownloadManager(downloadManager)
 	router := api.NewRouter(h)
 
 	log.Printf("app backend listening on %s, metadata-service=%s", listenAddr, metadataURL)
@@ -97,4 +108,63 @@ func envOrDefault(name string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func initDownloadStore(databaseDSN string) (downloadqueue.Storage, func()) {
+	if databaseDSN == "" {
+		log.Printf("download queue storage: using in-memory store")
+		return downloadqueue.NewStore(), func() {}
+	}
+	db, err := sql.Open("postgres", databaseDSN)
+	if err != nil {
+		log.Printf("download queue storage: postgres unavailable (%v), falling back to in-memory", err)
+		return downloadqueue.NewStore(), func() {}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		log.Printf("download queue storage: postgres ping failed (%v), falling back to in-memory", err)
+		return downloadqueue.NewStore(), func() {}
+	}
+	if err := downloadqueue.RunMigrations(ctx, db); err != nil {
+		_ = db.Close()
+		log.Printf("download queue storage: migration failed (%v), falling back to in-memory", err)
+		return downloadqueue.NewStore(), func() {}
+	}
+	log.Printf("download queue storage: using postgres")
+	return downloadqueue.NewPGStore(db), func() { _ = db.Close() }
+}
+
+func seedDownloadClients(store downloadqueue.Storage, hasQbit bool, hasSab bool, hasNZBGet bool) {
+	if hasQbit {
+		store.UpsertClient(downloadqueue.DownloadClientRecord{
+			ID:         "qbittorrent",
+			Name:       "qBittorrent",
+			ClientType: "qbittorrent",
+			Enabled:    true,
+			Priority:   200,
+			Config:     map[string]any{},
+		})
+	}
+	if hasSab {
+		store.UpsertClient(downloadqueue.DownloadClientRecord{
+			ID:         "sabnzbd",
+			Name:       "SABnzbd",
+			ClientType: "sabnzbd",
+			Enabled:    true,
+			Priority:   150,
+			Config:     map[string]any{},
+		})
+	}
+	if hasNZBGet {
+		store.UpsertClient(downloadqueue.DownloadClientRecord{
+			ID:         "nzbget",
+			Name:       "NZBGet",
+			ClientType: "nzbget",
+			Enabled:    true,
+			Priority:   100,
+			Config:     map[string]any{},
+		})
+	}
 }

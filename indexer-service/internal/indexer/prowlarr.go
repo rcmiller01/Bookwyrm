@@ -140,14 +140,21 @@ func mapProwlarrCandidate(m MetadataSnapshot, item map[string]any, idx int) Cand
 	if idxName := toStringValue(item["indexer"]); idxName != "" {
 		provenance = "prowlarr:" + idxName
 	}
+	protocol := inferProtocol(item, link)
+	grabPayload := buildGrabPayload(protocol, item, link)
 	return Candidate{
 		CandidateID:     candidateID,
 		Title:           title,
 		Format:          inferFormat(title),
+		Protocol:        protocol,
 		MatchConfidence: scoreProwlarrCandidate(m, title),
 		ProviderLink:    link,
 		Provenance:      provenance,
 		ReasonCodes:     scoreReasons(m, title),
+		GrabPayload:     grabPayload,
+		Attributes: map[string]any{
+			"indexer": toStringValue(item["indexer"]),
+		},
 	}
 }
 
@@ -197,4 +204,63 @@ func scoreReasons(m MetadataSnapshot, title string) []string {
 func toStringValue(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func inferProtocol(item map[string]any, fallbackLink string) string {
+	if protocol := strings.ToLower(toStringValue(item["protocol"])); protocol != "" {
+		if strings.Contains(protocol, "usenet") {
+			return "usenet"
+		}
+		if strings.Contains(protocol, "torrent") {
+			return "torrent"
+		}
+	}
+	if strings.HasPrefix(strings.ToLower(toStringValue(item["magnetUrl"])), "magnet:") {
+		return "torrent"
+	}
+	lower := strings.ToLower(strings.TrimSpace(fallbackLink))
+	if strings.HasPrefix(lower, "magnet:") || strings.Contains(lower, ".torrent") {
+		return "torrent"
+	}
+	return "usenet"
+}
+
+func buildGrabPayload(protocol string, item map[string]any, fallbackLink string) map[string]any {
+	guid := toStringValue(item["guid"])
+	downloadURL := toStringValue(item["downloadUrl"])
+	magnet := toStringValue(item["magnetUrl"])
+	torrentURL := toStringValue(item["torrentUrl"])
+
+	payload := map[string]any{
+		"protocol": protocol,
+	}
+
+	switch protocol {
+	case "torrent":
+		if magnet == "" && strings.HasPrefix(strings.ToLower(fallbackLink), "magnet:") {
+			magnet = fallbackLink
+		}
+		if torrentURL == "" && strings.HasPrefix(strings.ToLower(downloadURL), "http") {
+			torrentURL = downloadURL
+		}
+		if magnet != "" {
+			payload["magnet"] = magnet
+		}
+		if torrentURL != "" {
+			payload["torrent_url"] = torrentURL
+		}
+	default:
+		nzbURL := downloadURL
+		if nzbURL == "" && strings.HasPrefix(strings.ToLower(fallbackLink), "http") {
+			nzbURL = fallbackLink
+		}
+		if nzbURL != "" {
+			payload["nzb_url"] = nzbURL
+			payload["downloadUrl"] = nzbURL
+		}
+		if guid != "" {
+			payload["guid"] = guid
+		}
+	}
+	return payload
 }

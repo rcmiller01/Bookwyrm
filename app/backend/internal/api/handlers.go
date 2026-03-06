@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"app-backend/internal/domain"
+	"app-backend/internal/downloadqueue"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
 	"app-backend/internal/jobs"
@@ -23,6 +24,7 @@ type Handlers struct {
 	indexerClient  *indexer.Client
 	watchlistStore store.WatchlistStore
 	jobService     *jobs.Service
+	downloadMgr    *downloadqueue.Manager
 }
 
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
@@ -31,6 +33,10 @@ func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, wat
 
 func (h *Handlers) SetJobService(jobService *jobs.Service) {
 	h.jobService = jobService
+}
+
+func (h *Handlers) SetDownloadManager(downloadMgr *downloadqueue.Manager) {
+	h.downloadMgr = downloadMgr
 }
 
 func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
@@ -335,6 +341,112 @@ func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, job)
+}
+
+func (h *Handlers) ListDownloadJobs(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	filter := downloadqueue.JobFilter{
+		Status: downloadqueue.JobStatus(strings.TrimSpace(r.URL.Query().Get("status"))),
+		Limit:  limit,
+	}
+	items := h.downloadMgr.ListJobs(filter)
+	writeJSON(w, map[string]any{"items": items})
+}
+
+func (h *Handlers) GetDownloadJob(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	jobID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || jobID <= 0 {
+		writeError(w, "invalid download job id", http.StatusBadRequest)
+		return
+	}
+	job, err := h.downloadMgr.GetJob(jobID)
+	if err != nil {
+		if err == downloadqueue.ErrNotFound {
+			writeError(w, "download job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to load download job", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, job)
+}
+
+func (h *Handlers) CreateDownloadFromGrab(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	grabID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["grabID"]), 10, 64)
+	if err != nil || grabID <= 0 {
+		writeError(w, "invalid grab id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Client string `json:"client"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	job, err := h.downloadMgr.EnqueueFromGrab(r.Context(), grabID, strings.TrimSpace(body.Client))
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]any{"job": job})
+}
+
+func (h *Handlers) CancelDownloadJob(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	jobID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || jobID <= 0 {
+		writeError(w, "invalid download job id", http.StatusBadRequest)
+		return
+	}
+	if err := h.downloadMgr.CancelJob(jobID); err != nil {
+		if err == downloadqueue.ErrNotFound {
+			writeError(w, "download job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to cancel download job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) RetryDownloadJob(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	jobID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || jobID <= 0 {
+		writeError(w, "invalid download job id", http.StatusBadRequest)
+		return
+	}
+	if err := h.downloadMgr.RetryJob(jobID); err != nil {
+		if err == downloadqueue.ErrNotFound {
+			writeError(w, "download job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to retry download job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func userIDFromRequest(r *http.Request) string {

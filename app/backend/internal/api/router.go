@@ -23,5 +23,10 @@ func NewRouter(h *Handlers) http.Handler {
 	api.HandleFunc("/jobs/{id}", h.GetJob).Methods(http.MethodGet)
 	api.HandleFunc("/jobs/{id}/retry", h.RetryJob).Methods(http.MethodPost)
 	api.HandleFunc("/jobs/{id}/cancel", h.CancelJob).Methods(http.MethodPost)
+	api.HandleFunc("/download/jobs", h.ListDownloadJobs).Methods(http.MethodGet)
+	api.HandleFunc("/download/jobs/{id}", h.GetDownloadJob).Methods(http.MethodGet)
+	api.HandleFunc("/download/from-grab/{grabID}", h.CreateDownloadFromGrab).Methods(http.MethodPost)
+	api.HandleFunc("/download/jobs/{id}/cancel", h.CancelDownloadJob).Methods(http.MethodPost)
+	api.HandleFunc("/download/jobs/{id}/retry", h.RetryDownloadJob).Methods(http.MethodPost)
 	return r
 }

@@ -25,6 +25,9 @@ Implement an application backend and indexer-service layer that can run concurre
 
 - Existing metadata-service regression suite still passes.
 - New module tests pass for `app/backend` and `indexer-service`.
+- Candidate persistence must include protocol-aware `grab_payload`:
+  - Usenet: `nzb_url`/`downloadUrl` plus `guid`
+  - Torrent: `magnet` or `torrent_url`
 
 ---
 

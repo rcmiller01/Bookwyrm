@@ -19,11 +19,12 @@ type AddRequest struct {
 }
 
 type DownloadStatus struct {
-	Client   string         `json:"client"`
-	ID       string         `json:"id"`
-	State    string         `json:"state"`
-	Progress float64        `json:"progress"`
-	Raw      map[string]any `json:"raw,omitempty"`
+	Client     string         `json:"client"`
+	ID         string         `json:"id"`
+	State      string         `json:"state"`
+	Progress   float64        `json:"progress"`
+	OutputPath string         `json:"output_path,omitempty"`
+	Raw        map[string]any `json:"raw,omitempty"`
 }
 
 type Client interface {

@@ -30,6 +30,22 @@ type SearchRequest struct {
 	BackendGroups         []string       `json:"backend_groups,omitempty"`
 }
 
+type GrabRecord struct {
+	ID          int64  `json:"id"`
+	CandidateID int64  `json:"candidate_id"`
+	EntityType  string `json:"entity_type"`
+	EntityID    string `json:"entity_id"`
+	Status      string `json:"status"`
+}
+
+type CandidateRecord struct {
+	ID        int64 `json:"id"`
+	Candidate struct {
+		Protocol    string         `json:"protocol"`
+		GrabPayload map[string]any `json:"grab_payload"`
+	} `json:"candidate"`
+}
+
 func NewClient(cfg Config) *Client {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -74,4 +90,93 @@ func (c *Client) Search(ctx context.Context, reqBody SearchRequest) (map[string]
 		return nil, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
 	}
 	return parsed, nil
+}
+
+func (c *Client) GetGrab(ctx context.Context, grabID int64) (GrabRecord, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/v1/indexer/grabs/%d", c.baseURL, grabID), nil)
+	if err != nil {
+		return GrabRecord{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return GrabRecord{}, err
+	}
+	defer resp.Body.Close()
+	var parsed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return GrabRecord{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return GrabRecord{}, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	raw, ok := parsed["grab"].(map[string]any)
+	if !ok {
+		return GrabRecord{}, fmt.Errorf("invalid indexer grab response")
+	}
+	return GrabRecord{
+		ID:          toInt64(raw["id"]),
+		CandidateID: toInt64(raw["candidate_id"]),
+		EntityType:  toString(raw["entity_type"]),
+		EntityID:    toString(raw["entity_id"]),
+		Status:      toString(raw["status"]),
+	}, nil
+}
+
+func (c *Client) GetCandidate(ctx context.Context, candidateID int64) (CandidateRecord, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/v1/indexer/candidates/id/%d", c.baseURL, candidateID), nil)
+	if err != nil {
+		return CandidateRecord{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return CandidateRecord{}, err
+	}
+	defer resp.Body.Close()
+	var parsed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return CandidateRecord{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return CandidateRecord{}, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	raw, ok := parsed["candidate"].(map[string]any)
+	if !ok {
+		return CandidateRecord{}, fmt.Errorf("invalid indexer candidate response")
+	}
+	record := CandidateRecord{
+		ID: toInt64(raw["id"]),
+	}
+	cand, _ := raw["candidate"].(map[string]any)
+	record.Candidate.Protocol = toString(cand["protocol"])
+	record.Candidate.GrabPayload, _ = cand["grab_payload"].(map[string]any)
+	if record.Candidate.GrabPayload == nil {
+		record.Candidate.GrabPayload = map[string]any{}
+	}
+	return record, nil
+}
+
+func toInt64(v any) int64 {
+	switch vv := v.(type) {
+	case float64:
+		return int64(vv)
+	case int64:
+		return vv
+	case int:
+		return int64(vv)
+	default:
+		return 0
+	}
+}
+
+func toString(v any) string {
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
 }

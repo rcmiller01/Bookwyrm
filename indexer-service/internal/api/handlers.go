@@ -3,16 +3,32 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"indexer-service/internal/indexer"
+	"indexer-service/internal/mcp"
+
+	"github.com/gorilla/mux"
 )
 
 type Handlers struct {
-	service *indexer.Service
+	service      *indexer.Service
+	store        indexer.Storage
+	orchestrator *indexer.Orchestrator
+	mcpRegistry  *mcp.Registry
+	mcpRuntime   *mcp.Runtime
 }
 
-func NewHandlers(service *indexer.Service) *Handlers {
-	return &Handlers{service: service}
+func NewHandlers(service *indexer.Service, store indexer.Storage, orchestrator *indexer.Orchestrator, mcpRegistry *mcp.Registry, mcpRuntime *mcp.Runtime) *Handlers {
+	return &Handlers{
+		service:      service,
+		store:        store,
+		orchestrator: orchestrator,
+		mcpRegistry:  mcpRegistry,
+		mcpRuntime:   mcpRuntime,
+	}
 }
 
 func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
@@ -39,6 +55,266 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
+}
+
+func (h *Handlers) EnqueueWorkSearch(w http.ResponseWriter, r *http.Request) {
+	workID := strings.TrimSpace(mux.Vars(r)["workID"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Title      string   `json:"title"`
+		Author     string   `json:"author"`
+		ISBN       string   `json:"isbn"`
+		DOI        string   `json:"doi"`
+		Formats    []string `json:"formats"`
+		Languages  []string `json:"languages"`
+		Limit      int      `json:"limit"`
+		TimeoutSec int      `json:"timeout_sec"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	spec := indexer.QuerySpec{
+		EntityType: "work",
+		EntityID:   workID,
+		Title:      body.Title,
+		Author:     body.Author,
+		ISBN:       body.ISBN,
+		DOI:        body.DOI,
+	}
+	spec.Preferences.Formats = body.Formats
+	spec.Preferences.Languages = body.Languages
+	spec.Limits.MaxCandidates = body.Limit
+	spec.Limits.TimeoutSec = body.TimeoutSec
+	if spec.Title == "" {
+		spec.Title = workID
+	}
+	req := h.orchestrator.Enqueue(spec)
+	writeJSON(w, map[string]any{
+		"search_request_id": req.ID,
+		"status":            req.Status,
+	})
+}
+
+func (h *Handlers) GetSearchRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["requestID"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid request id", http.StatusBadRequest)
+		return
+	}
+	rec, err := h.store.GetSearchRequest(id)
+	if err != nil {
+		writeError(w, "search request not found", http.StatusNotFound)
+		return
+	}
+	candidates, _ := h.store.ListCandidates(id, 10)
+	writeJSON(w, map[string]any{
+		"request":        rec,
+		"top_candidates": candidates,
+	})
+}
+
+func (h *Handlers) ListCandidates(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["requestID"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid request id", http.StatusBadRequest)
+		return
+	}
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	candidates, err := h.store.ListCandidates(id, limit)
+	if err != nil {
+		writeError(w, "candidates not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]any{"items": candidates})
+}
+
+func (h *Handlers) GrabCandidate(w http.ResponseWriter, r *http.Request) {
+	candidateID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["candidateID"]), 10, 64)
+	if err != nil || candidateID <= 0 {
+		writeError(w, "invalid candidate id", http.StatusBadRequest)
+		return
+	}
+	candidate, err := h.store.GetCandidateByID(candidateID)
+	if err != nil {
+		writeError(w, "candidate not found", http.StatusNotFound)
+		return
+	}
+	rec, err := h.store.GetSearchRequest(candidate.SearchRequestID)
+	if err != nil {
+		writeError(w, "candidate search request missing", http.StatusNotFound)
+		return
+	}
+	grab, err := h.store.CreateGrab(candidateID, rec.EntityType, rec.EntityID)
+	if err != nil {
+		writeError(w, "failed to create grab", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"grab": grab})
+}
+
+func (h *Handlers) GetCandidateByID(w http.ResponseWriter, r *http.Request) {
+	candidateID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["candidateID"]), 10, 64)
+	if err != nil || candidateID <= 0 {
+		writeError(w, "invalid candidate id", http.StatusBadRequest)
+		return
+	}
+	candidate, err := h.store.GetCandidateByID(candidateID)
+	if err != nil {
+		writeError(w, "candidate not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]any{"candidate": candidate})
+}
+
+func (h *Handlers) GetGrabByID(w http.ResponseWriter, r *http.Request) {
+	grabID, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["grabID"]), 10, 64)
+	if err != nil || grabID <= 0 {
+		writeError(w, "invalid grab id", http.StatusBadRequest)
+		return
+	}
+	grab, err := h.store.GetGrabByID(grabID)
+	if err != nil {
+		writeError(w, "grab not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]any{"grab": grab})
+}
+
+func (h *Handlers) ListBackends(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"backends": h.store.ListBackends()})
+}
+
+func (h *Handlers) EnableBackend(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if err := h.store.SetBackendEnabled(id, true); err != nil {
+		writeError(w, "backend not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) DisableBackend(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if err := h.store.SetBackendEnabled(id, false); err != nil {
+		writeError(w, "backend not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) SetBackendPriority(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	var body struct {
+		Priority int `json:"priority"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.SetBackendPriority(id, body.Priority); err != nil {
+		writeError(w, "backend not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) ListBackendReliability(w http.ResponseWriter, _ *http.Request) {
+	backends := h.store.ListBackends()
+	writeJSON(w, map[string]any{"backends": backends})
+}
+
+func (h *Handlers) ListMCPServers(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"servers": h.mcpRegistry.ListServers()})
+}
+
+func (h *Handlers) CreateMCPServer(w http.ResponseWriter, r *http.Request) {
+	var rec indexer.MCPServerRecord
+	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.Name) == "" || strings.TrimSpace(rec.Source) == "" || strings.TrimSpace(rec.SourceRef) == "" {
+		writeError(w, "id, name, source, and source_ref are required", http.StatusBadRequest)
+		return
+	}
+	if rec.EnvSchema == nil {
+		rec.EnvSchema = map[string]string{}
+	}
+	if rec.EnvMapping == nil {
+		rec.EnvMapping = map[string]string{}
+	}
+	rec.Enabled = true
+	rec = h.mcpRegistry.UpsertServer(rec)
+	backendID := "mcp:" + rec.ID
+	h.store.UpsertBackend(indexer.BackendRecord{
+		ID:               backendID,
+		Name:             rec.Name,
+		BackendType:      indexer.BackendTypeMCP,
+		Enabled:          true,
+		Tier:             indexer.TierUnclassified,
+		ReliabilityScore: 0.70,
+		Priority:         200,
+		Config:           map[string]any{"server_id": rec.ID},
+	})
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, rec)
+}
+
+func (h *Handlers) EnableMCPServer(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if err := h.mcpRegistry.SetEnabled(id, true); err != nil {
+		writeError(w, "mcp server not found", http.StatusNotFound)
+		return
+	}
+	_ = h.store.SetBackendEnabled("mcp:"+id, true)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) DisableMCPServer(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if err := h.mcpRegistry.SetEnabled(id, false); err != nil {
+		writeError(w, "mcp server not found", http.StatusNotFound)
+		return
+	}
+	_ = h.store.SetBackendEnabled("mcp:"+id, false)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) SetMCPEnvMapping(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	var body map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.mcpRegistry.SetEnvMapping(id, body); err != nil {
+		writeError(w, "mcp server not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) TestMCPServer(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	server, err := h.mcpRegistry.Get(id)
+	if err != nil {
+		writeError(w, "mcp server not found", http.StatusNotFound)
+		return
+	}
+	client := mcp.NewClient(server.BaseURL, 8*time.Second)
+	headers := h.mcpRuntime.HeadersFor(server)
+	if err := client.Health(r.Context(), headers); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "server_id": id})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

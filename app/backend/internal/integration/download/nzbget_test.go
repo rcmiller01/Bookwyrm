@@ -24,6 +24,7 @@ func TestNZBGetClient_AddAndStatus(t *testing.T) {
 						"Status":           "DOWNLOADING",
 						"DownloadedSizeMB": 50.0,
 						"RemainingSizeMB":  50.0,
+						"DestDir":          "/downloads/completed/Dune",
 					},
 				},
 				"error": nil,
@@ -55,5 +56,8 @@ func TestNZBGetClient_AddAndStatus(t *testing.T) {
 	}
 	if status.Progress <= 0 {
 		t.Fatalf("expected positive progress, got %f", status.Progress)
+	}
+	if status.OutputPath != "/downloads/completed/Dune" {
+		t.Fatalf("unexpected output path: %s", status.OutputPath)
 	}
 }
