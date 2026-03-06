@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"app-backend/internal/api"
 	"app-backend/internal/downloadqueue"
+	"app-backend/internal/importer"
 	"app-backend/internal/integration/download"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
@@ -35,6 +37,8 @@ func main() {
 	nzbgetPass := os.Getenv("NZBGET_PASSWORD")
 	nzbgetCategory := envOrDefault("NZBGET_CATEGORY", "books")
 	downloadQuarantineMode := envOrDefault("DOWNLOAD_QUARANTINE_MODE", "last_resort")
+	libraryRoot := envOrDefault("LIBRARY_ROOT", "./library")
+	allowCrossDeviceMove := strings.EqualFold(envOrDefault("LIBRARY_ALLOW_CROSS_DEVICE_MOVE", "true"), "true")
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 
@@ -80,6 +84,14 @@ func main() {
 	seedDownloadClients(downloadStore, qbitURL != "", sabURL != "", nzbgetURL != "")
 	downloadManager := downloadqueue.NewManager(downloadStore, downloadService, indexerClient, downloadQuarantineMode)
 	downloadManager.Start(context.Background())
+	importStore := initImporterStore(databaseDSN)
+	defer closeImporterStore(importStore)
+	importEngine := importer.NewEngine(importer.Config{
+		LibraryRoot:          libraryRoot,
+		AllowCrossDeviceMove: allowCrossDeviceMove,
+		MaxScanFiles:         5000,
+	}, importStore, downloadStore)
+	importEngine.Start(context.Background())
 
 	jobStore := store.NewInMemoryJobStore()
 	jobService := jobs.NewService(
@@ -174,4 +186,29 @@ func seedDownloadClients(store downloadqueue.Storage, hasQbit bool, hasSab bool,
 			Config:           map[string]any{},
 		})
 	}
+}
+
+func initImporterStore(databaseDSN string) importer.Store {
+	if databaseDSN == "" {
+		return importer.NewMemoryStore()
+	}
+	db, err := sql.Open("postgres", databaseDSN)
+	if err != nil {
+		return importer.NewMemoryStore()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return importer.NewMemoryStore()
+	}
+	return importer.NewPGStore(db)
+}
+
+func closeImporterStore(store importer.Store) {
+	pg, ok := store.(*importer.PGStore)
+	if !ok {
+		return
+	}
+	_ = pg.Close()
 }
