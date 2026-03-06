@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -259,6 +260,103 @@ func TestEngineAmbiguousMatchNeedsReviewThenApproveImports(t *testing.T) {
 	finalFile := filepath.Join(libraryRoot, "Unknown Author", "Some.Random.Book", "Some.Random.Book.epub")
 	if _, err := os.Stat(finalFile); err != nil {
 		t.Fatalf("expected moved file at %s: %v", finalFile, err)
+	}
+}
+
+func TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	importStore := NewMemoryStore()
+	downloadStore := downloadqueue.NewStore()
+
+	// First import establishes target audiobook folder with two tracks.
+	srcA := filepath.Join(t.TempDir(), "completed", "audiobookA")
+	mustWriteFileEngine(t, filepath.Join(srcA, "Track 01.mp3"), "aaa")
+	mustWriteFileEngine(t, filepath.Join(srcA, "Track 02.mp3"), "bbb")
+	jobA, _ := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      201,
+		CandidateID: 201,
+		WorkID:      "work-audio",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	_ = downloadStore.UpdateProgress(jobA.ID, downloadqueue.JobStatusCompleted, srcA, "")
+
+	engine := NewEngine(Config{
+		LibraryRoot:             libraryRoot,
+		AllowCrossDeviceMove:    true,
+		MaxScanFiles:            100,
+		TemplateEbook:           "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+	}, importStore, downloadStore, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	engine.Start(ctx)
+	_ = waitForImportStatus(t, importStore, JobStatusImported, 8*time.Second)
+
+	// Second import, same filenames and sizes: should idempotently import.
+	srcB := filepath.Join(t.TempDir(), "completed", "audiobookB")
+	mustWriteFileEngine(t, filepath.Join(srcB, "Track 01.mp3"), "aaa")
+	mustWriteFileEngine(t, filepath.Join(srcB, "Track 02.mp3"), "bbb")
+	jobB, _ := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      202,
+		CandidateID: 202,
+		WorkID:      "work-audio",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	_ = downloadStore.UpdateProgress(jobB.ID, downloadqueue.JobStatusCompleted, srcB, "")
+	importedAgain := waitForImportStatus(t, importStore, JobStatusImported, 8*time.Second)
+	if importedAgain.ID == 0 {
+		t.Fatalf("expected idempotent audiobook re-import to import successfully")
+	}
+
+	// Third import, same path but one track differs: should require review.
+	srcC := filepath.Join(t.TempDir(), "completed", "audiobookC")
+	mustWriteFileEngine(t, filepath.Join(srcC, "Track 01.mp3"), "aaa")
+	mustWriteFileEngine(t, filepath.Join(srcC, "Track 02.mp3"), "different-size-content")
+	jobC, _ := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      203,
+		CandidateID: 203,
+		WorkID:      "work-audio",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	_ = downloadStore.UpdateProgress(jobC.ID, downloadqueue.JobStatusCompleted, srcC, "")
+	review := waitForImportStatus(t, importStore, JobStatusNeedsReview, 8*time.Second)
+	if review.ID == 0 {
+		t.Fatalf("expected needs_review on conflicting audiobook folder collision")
+	}
+}
+
+func TestMoveOrCopy_FallbackOnCrossDeviceRename(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src.epub")
+	dst := filepath.Join(root, "dst.epub")
+	mustWriteFileEngine(t, src, "copy-via-exdev")
+
+	engine := NewEngine(Config{
+		LibraryRoot:          root,
+		AllowCrossDeviceMove: true,
+	}, NewMemoryStore(), downloadqueue.NewStore(), nil)
+	engine.renameFn = func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EXDEV}
+	}
+
+	if err := engine.moveOrCopy(src, dst); err != nil {
+		t.Fatalf("expected cross-device fallback to succeed, got %v", err)
+	}
+	if _, err := os.Stat(dst); err != nil {
+		t.Fatalf("expected destination file to exist: %v", err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("expected source file removed after verified copy, err=%v", err)
 	}
 }
 

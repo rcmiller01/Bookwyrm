@@ -612,8 +612,9 @@ func (h *Handlers) GetImportStats(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	counts := h.importStore.CountJobsByStatus()
+	nextRunnable := h.importStore.NextRunnableAt()
 	writeJSON(w, map[string]any{
-		"counts": map[string]int{
+		"counts_by_status": map[string]int{
 			"queued":       counts[importer.JobStatusQueued],
 			"running":      counts[importer.JobStatusRunning],
 			"needs_review": counts[importer.JobStatusNeedsReview],
@@ -621,11 +622,9 @@ func (h *Handlers) GetImportStats(w http.ResponseWriter, _ *http.Request) {
 			"failed":       counts[importer.JobStatusFailed],
 			"skipped":      counts[importer.JobStatusSkipped],
 		},
-		"next_runnable_at": nil,
-		"keep_incoming": map[string]any{
-			"value":  h.importConfig.KeepIncoming,
-			"source": fallbackString(h.importConfig.Source, "default"),
-		},
+		"next_runnable_at":     nextRunnable,
+		"keep_incoming":        h.importConfig.KeepIncoming,
+		"keep_incoming_source": fallbackString(h.importConfig.Source, "default"),
 	})
 }
 

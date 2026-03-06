@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"app-backend/internal/downloadqueue"
@@ -21,6 +22,7 @@ type Engine struct {
 	store         Store
 	downloadStore downloadqueue.Storage
 	metaClient    *metadata.Client
+	renameFn      func(oldpath, newpath string) error
 }
 
 func NewEngine(cfg Config, store Store, downloadStore downloadqueue.Storage, metaClient *metadata.Client) *Engine {
@@ -47,6 +49,7 @@ func NewEngine(cfg Config, store Store, downloadStore downloadqueue.Storage, met
 		store:         store,
 		downloadStore: downloadStore,
 		metaClient:    metaClient,
+		renameFn:      os.Rename,
 	}
 }
 
@@ -248,14 +251,21 @@ func (e *Engine) moveOrCopy(src string, dst string) error {
 		}
 		return fmt.Errorf("target already exists: %s", dst)
 	}
-	if err := os.Rename(src, dst); err == nil {
+	if err := e.renameFn(src, dst); err == nil {
 		return nil
+	} else if !errors.Is(err, syscall.EXDEV) {
+		return err
 	}
 	if !e.cfg.AllowCrossDeviceMove {
 		return fmt.Errorf("cross-device move not allowed: %s -> %s", src, dst)
 	}
 	if err := copyFile(src, dst); err != nil {
 		return err
+	}
+	srcInfo, srcErr := os.Stat(src)
+	dstInfo, dstErr := os.Stat(dst)
+	if srcErr != nil || dstErr != nil || srcInfo.Size() != dstInfo.Size() {
+		return fmt.Errorf("copy verify failed for %s -> %s", src, dst)
 	}
 	_ = os.Remove(src)
 	return nil

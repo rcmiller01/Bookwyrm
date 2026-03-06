@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -120,12 +121,39 @@ func TestImportNeedsReviewEndpoints(t *testing.T) {
 	if err := json.NewDecoder(statsRes.Body).Decode(&statsBody); err != nil {
 		t.Fatalf("decode stats body: %v", err)
 	}
-	keepIncoming, ok := statsBody["keep_incoming"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected keep_incoming object")
+	if _, ok := statsBody["next_runnable_at"]; !ok {
+		t.Fatalf("expected next_runnable_at in stats response")
 	}
-	if keepIncoming["source"] != "env" {
-		t.Fatalf("expected keep_incoming source=env, got %v", keepIncoming["source"])
+	keepIncoming, ok := statsBody["keep_incoming"].(bool)
+	if !ok {
+		t.Fatalf("expected keep_incoming bool")
+	}
+	if !keepIncoming {
+		t.Fatalf("expected keep_incoming true")
+	}
+	if statsBody["keep_incoming_source"] != "env" {
+		t.Fatalf("expected keep_incoming_source=env, got %v", statsBody["keep_incoming_source"])
+	}
+	counts, ok := statsBody["counts_by_status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected counts_by_status object")
+	}
+	for _, key := range []string{"queued", "running", "needs_review", "imported", "failed", "skipped"} {
+		if _, exists := counts[key]; !exists {
+			t.Fatalf("missing status count key %q", key)
+		}
+	}
+
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsRes := httptest.NewRecorder()
+	router.ServeHTTP(metricsRes, metricsReq)
+	if metricsRes.Code != http.StatusOK {
+		t.Fatalf("metrics status: got %d", metricsRes.Code)
+	}
+	bodyBytes, _ := io.ReadAll(metricsRes.Body)
+	bodyText := string(bodyBytes)
+	if !strings.Contains(bodyText, "import_jobs_created_total") || !strings.Contains(bodyText, "import_job_duration_seconds") {
+		t.Fatalf("expected import metrics in /metrics output")
 	}
 }
 

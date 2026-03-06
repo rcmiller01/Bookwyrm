@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"app-backend/internal/downloadqueue"
+	"app-backend/internal/metrics"
 )
 
 type PGStore struct {
@@ -42,7 +43,11 @@ func (s *PGStore) CreateOrGetFromDownload(download downloadqueue.Job, targetRoot
 		RETURNING id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at`,
 		download.ID, download.WorkID, download.EditionID, download.OutputPath, targetRoot, namingRaw, decisionRaw,
 	)
-	return scanJob(insert)
+	created, scanErr := scanJob(insert)
+	if scanErr == nil {
+		metrics.ImportJobsCreatedTotal.Inc()
+	}
+	return created, scanErr
 }
 
 func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, error) {
@@ -126,6 +131,10 @@ func (s *PGStore) ListJobs(filter JobFilter) []Job {
 }
 
 func (s *PGStore) MarkImported(id int64, targetPath string, naming map[string]any, decision map[string]any) error {
+	job, err := s.GetJob(id)
+	if err != nil {
+		return err
+	}
 	namingRaw, _ := json.Marshal(naming)
 	decisionRaw, _ := json.Marshal(decision)
 	tag, err := s.db.ExecContext(context.Background(), `
@@ -138,6 +147,8 @@ func (s *PGStore) MarkImported(id int64, targetPath string, naming map[string]an
 	if n, _ := tag.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	metrics.ImportJobsImportedTotal.Inc()
+	metrics.ObserveImportTerminalDuration(job.CreatedAt)
 	return nil
 }
 
@@ -154,10 +165,15 @@ func (s *PGStore) MarkNeedsReview(id int64, reason string, naming map[string]any
 	if n, _ := tag.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	metrics.ImportJobsNeedsReviewTotal.Inc()
 	return nil
 }
 
 func (s *PGStore) MarkFailed(id int64, errMsg string, terminal bool) error {
+	job, err := s.GetJob(id)
+	if err != nil {
+		return err
+	}
 	status := "queued"
 	if terminal {
 		status = "failed"
@@ -169,6 +185,10 @@ func (s *PGStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 	}
 	if n, _ := tag.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	if status == "failed" {
+		metrics.ImportJobsFailedTotal.Inc()
+		metrics.ObserveImportTerminalDuration(job.CreatedAt)
 	}
 	return nil
 }
@@ -199,6 +219,10 @@ func (s *PGStore) Approve(id int64, workID string, editionID string, templateOve
 }
 
 func (s *PGStore) Skip(id int64, reason string) error {
+	job, err := s.GetJob(id)
+	if err != nil {
+		return err
+	}
 	tag, err := s.db.ExecContext(context.Background(), `UPDATE import_jobs SET status='skipped',last_error=$2,updated_at=NOW() WHERE id=$1`, id, reason)
 	if err != nil {
 		return err
@@ -206,6 +230,8 @@ func (s *PGStore) Skip(id int64, reason string) error {
 	if n, _ := tag.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	metrics.ImportJobsSkippedTotal.Inc()
+	metrics.ObserveImportTerminalDuration(job.CreatedAt)
 	return nil
 }
 
@@ -297,6 +323,19 @@ func (s *PGStore) CountJobsByStatus() map[JobStatus]int {
 		out[JobStatus(status)] = count
 	}
 	return out
+}
+
+func (s *PGStore) NextRunnableAt() *time.Time {
+	row := s.db.QueryRowContext(context.Background(), `
+		SELECT MIN(created_at)
+		FROM import_jobs
+		WHERE status = 'queued'`)
+	var ts sql.NullTime
+	if err := row.Scan(&ts); err != nil || !ts.Valid {
+		return nil
+	}
+	value := ts.Time.UTC()
+	return &value
 }
 
 type rowScanner interface {

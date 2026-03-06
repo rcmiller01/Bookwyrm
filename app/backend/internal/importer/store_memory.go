@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"app-backend/internal/downloadqueue"
+	"app-backend/internal/metrics"
 )
 
 type MemoryStore struct {
@@ -58,6 +59,7 @@ func (s *MemoryStore) CreateOrGetFromDownload(download downloadqueue.Job, target
 	s.nextJobID++
 	s.jobsByID[job.ID] = job
 	s.downloadJobToID[download.ID] = job.ID
+	metrics.ImportJobsCreatedTotal.Inc()
 	return job, nil
 }
 
@@ -135,6 +137,8 @@ func (s *MemoryStore) MarkImported(id int64, targetPath string, naming map[strin
 	job.LastError = ""
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
+	metrics.ImportJobsImportedTotal.Inc()
+	metrics.ObserveImportTerminalDuration(job.CreatedAt)
 	return nil
 }
 
@@ -151,6 +155,7 @@ func (s *MemoryStore) MarkNeedsReview(id int64, reason string, naming map[string
 	job.Decision = cloneMap(decision)
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
+	metrics.ImportJobsNeedsReviewTotal.Inc()
 	return nil
 }
 
@@ -169,6 +174,10 @@ func (s *MemoryStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 	job.LastError = errMsg
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
+	if job.Status == JobStatusFailed {
+		metrics.ImportJobsFailedTotal.Inc()
+		metrics.ObserveImportTerminalDuration(job.CreatedAt)
+	}
 	return nil
 }
 
@@ -216,6 +225,8 @@ func (s *MemoryStore) Skip(id int64, reason string) error {
 	job.LastError = reason
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
+	metrics.ImportJobsSkippedTotal.Inc()
+	metrics.ObserveImportTerminalDuration(job.CreatedAt)
 	return nil
 }
 
@@ -288,6 +299,23 @@ func (s *MemoryStore) CountJobsByStatus() map[JobStatus]int {
 		out[job.Status]++
 	}
 	return out
+}
+
+func (s *MemoryStore) NextRunnableAt() *time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var next *time.Time
+	for _, job := range s.jobsByID {
+		if job.Status != JobStatusQueued {
+			continue
+		}
+		ts := job.CreatedAt
+		if next == nil || ts.Before(*next) {
+			candidate := ts
+			next = &candidate
+		}
+	}
+	return next
 }
 
 func cloneMap(in map[string]any) map[string]any {

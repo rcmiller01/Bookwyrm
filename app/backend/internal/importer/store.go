@@ -26,4 +26,5 @@ type Store interface {
 	UpsertLibraryItem(item LibraryItem) (LibraryItem, error)
 	ListLibraryItems(workID string, limit int) []LibraryItem
 	CountJobsByStatus() map[JobStatus]int
+	NextRunnableAt() *time.Time
 }
