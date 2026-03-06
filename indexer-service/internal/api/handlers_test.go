@@ -291,6 +291,74 @@ func TestGetCandidateAndGrabByIDEndpoints(t *testing.T) {
 	}
 }
 
+func TestWantedWorkEndpoints(t *testing.T) {
+	h := testHandlers()
+	r := NewRouter(h)
+
+	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/works/work-123", bytes.NewBufferString(`{"enabled":true,"priority":12,"cadence_minutes":45,"formats":["epub"],"languages":["en"]}`))
+	putRes := httptest.NewRecorder()
+	r.ServeHTTP(putRes, putReq)
+	if putRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 set wanted work, got %d", putRes.Code)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/v1/indexer/wanted/works", nil)
+	listRes := httptest.NewRecorder()
+	r.ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 list wanted works, got %d", listRes.Code)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(listRes.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode wanted works failed: %v", err)
+	}
+	items, _ := payload["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 wanted work item, got %d", len(items))
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/v1/indexer/wanted/works/work-123", nil)
+	delRes := httptest.NewRecorder()
+	r.ServeHTTP(delRes, delReq)
+	if delRes.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 delete wanted work, got %d", delRes.Code)
+	}
+}
+
+func TestWantedAuthorEndpoints(t *testing.T) {
+	h := testHandlers()
+	r := NewRouter(h)
+
+	putReq := httptest.NewRequest(http.MethodPut, "/v1/indexer/wanted/authors/author-123", bytes.NewBufferString(`{"enabled":true,"priority":22,"cadence_minutes":30}`))
+	putRes := httptest.NewRecorder()
+	r.ServeHTTP(putRes, putReq)
+	if putRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 set wanted author, got %d", putRes.Code)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/v1/indexer/wanted/authors", nil)
+	listRes := httptest.NewRecorder()
+	r.ServeHTTP(listRes, listReq)
+	if listRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 list wanted authors, got %d", listRes.Code)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(listRes.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode wanted authors failed: %v", err)
+	}
+	items, _ := payload["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 wanted author item, got %d", len(items))
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/v1/indexer/wanted/authors/author-123", nil)
+	delRes := httptest.NewRecorder()
+	r.ServeHTTP(delRes, delReq)
+	if delRes.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 delete wanted author, got %d", delRes.Code)
+	}
+}
+
 func itoa(v int64) string {
 	if v == 0 {
 		return "0"

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -154,6 +155,62 @@ func TestImportNeedsReviewEndpoints(t *testing.T) {
 	bodyText := string(bodyBytes)
 	if !strings.Contains(bodyText, "import_jobs_created_total") || !strings.Contains(bodyText, "import_job_duration_seconds") {
 		t.Fatalf("expected import metrics in /metrics output")
+	}
+}
+
+func TestImportDecideEndpointSkip(t *testing.T) {
+	h := NewHandlers(nil, nil, store.NewInMemoryWatchlistStore())
+	importStore := importer.NewMemoryStore()
+	h.SetImportStore(importStore)
+
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	dStore := downloadqueue.NewStore()
+	engine := importer.NewEngine(importer.Config{LibraryRoot: libraryRoot, AllowCrossDeviceMove: true, MaxScanFiles: 100}, importStore, dStore, nil)
+	h.SetImportEngine(engine)
+
+	router := NewRouter(h)
+
+	dj, err := dStore.CreateJob(downloadqueue.Job{
+		GrabID:      2,
+		CandidateID: 2,
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+		OutputPath:  filepath.Join(t.TempDir(), "downloads", "job2"),
+	})
+	if err != nil {
+		t.Fatalf("create download job: %v", err)
+	}
+	job, err := importStore.CreateOrGetFromDownload(dj, libraryRoot)
+	if err != nil {
+		t.Fatalf("create import job: %v", err)
+	}
+	if err := importStore.MarkNeedsReview(job.ID, "collision", map[string]any{}, map[string]any{}); err != nil {
+		t.Fatalf("mark needs_review: %v", err)
+	}
+
+	badReq := httptest.NewRequest(http.MethodPost, "/api/v1/import/jobs/"+itoa(job.ID)+"/decide", strings.NewReader(`{"action":"bogus"}`))
+	badReq.Header.Set("Content-Type", "application/json")
+	badRes := httptest.NewRecorder()
+	router.ServeHTTP(badRes, badReq)
+	if badRes.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid action, got %d", badRes.Code)
+	}
+
+	decideReq := httptest.NewRequest(http.MethodPost, "/api/v1/import/jobs/"+itoa(job.ID)+"/decide", strings.NewReader(`{"action":"skip"}`))
+	decideReq.Header.Set("Content-Type", "application/json")
+	decideRes := httptest.NewRecorder()
+	router.ServeHTTP(decideRes, decideReq)
+	if decideRes.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for skip decision, got %d", decideRes.Code)
+	}
+	updated, err := importStore.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("get import job: %v", err)
+	}
+	if updated.Status != importer.JobStatusSkipped {
+		t.Fatalf("expected skipped status after skip decision, got %s", updated.Status)
 	}
 }
 

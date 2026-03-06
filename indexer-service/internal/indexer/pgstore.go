@@ -190,7 +190,7 @@ func (s *PGStore) SetMCPEnvMapping(id string, mapping map[string]string) error {
 }
 
 func (s *PGStore) CreateOrGetSearchRequest(requestKey string, query QuerySpec, maxAttempts int) SearchRequestRecord {
-	row := s.db.QueryRow(context.Background(), `SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM indexer_search_requests WHERE request_key=$1`, requestKey)
+	row := s.db.QueryRow(context.Background(), `SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM indexer_search_requests WHERE request_key=$1`, requestKey)
 	rec, err := scanSearchRequestRow(row)
 	if err == nil {
 		return rec
@@ -202,7 +202,7 @@ func (s *PGStore) CreateOrGetSearchRequest(requestKey string, query QuerySpec, m
 	insertRow := s.db.QueryRow(context.Background(), `
 		INSERT INTO indexer_search_requests (request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,last_error,not_before,created_at,updated_at)
 		VALUES ($1,$2,$3,$4,'queued',0,$5,'',NOW(),NOW(),NOW())
-		RETURNING id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at`,
+		RETURNING id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at`,
 		requestKey, query.EntityType, query.EntityID, queryJSON, maxAttempts,
 	)
 	rec, _ = scanSearchRequestRow(insertRow)
@@ -210,7 +210,7 @@ func (s *PGStore) CreateOrGetSearchRequest(requestKey string, query QuerySpec, m
 }
 
 func (s *PGStore) GetSearchRequest(id int64) (SearchRequestRecord, error) {
-	row := s.db.QueryRow(context.Background(), `SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM indexer_search_requests WHERE id=$1`, id)
+	row := s.db.QueryRow(context.Background(), `SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM indexer_search_requests WHERE id=$1`, id)
 	return scanSearchRequestRow(row)
 }
 
@@ -221,7 +221,7 @@ func (s *PGStore) TryLockNextSearchRequest(workerID string, now time.Time) (Sear
 	}
 	defer tx.Rollback(context.Background())
 	row := tx.QueryRow(context.Background(), `
-		SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,request_key,entity_type,entity_id,query_json,status,attempt_count,max_attempts,COALESCE(last_error,''),not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at
 		FROM indexer_search_requests
 		WHERE status='queued' AND not_before <= $1
 		ORDER BY created_at ASC
@@ -237,8 +237,8 @@ func (s *PGStore) TryLockNextSearchRequest(workerID string, now time.Time) (Sear
 	}
 	_, err = tx.Exec(context.Background(), `
 		UPDATE indexer_search_requests
-		SET status='running', attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW()
-		WHERE id=$1`, rec.ID, workerID,
+		SET status='running', attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, lease_expires_at=NOW() + ($3 * INTERVAL '1 second'), updated_at=NOW()
+		WHERE id=$1`, rec.ID, workerID, int(SearchRequestLeaseTTL.Seconds()),
 	)
 	if err != nil {
 		return SearchRequestRecord{}, false, err
@@ -253,6 +253,70 @@ func (s *PGStore) TryLockNextSearchRequest(workerID string, now time.Time) (Sear
 	return updated, true, nil
 }
 
+func (s *PGStore) RecoverExpiredSearchRequests(now time.Time, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	tx, err := s.db.Begin(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(context.Background())
+
+	rows, err := tx.Query(context.Background(), `
+		SELECT id, attempt_count, max_attempts
+		FROM indexer_search_requests
+		WHERE status='running'
+		  AND lease_expires_at IS NOT NULL
+		  AND lease_expires_at <= $1
+		ORDER BY lease_expires_at ASC
+		FOR UPDATE SKIP LOCKED
+		LIMIT $2`, now.UTC(), limit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	recovered := 0
+	for rows.Next() {
+		var id int64
+		var attemptCount int
+		var maxAttempts int
+		if scanErr := rows.Scan(&id, &attemptCount, &maxAttempts); scanErr != nil {
+			return 0, scanErr
+		}
+		nextAttempt := attemptCount + 1
+		status := "queued"
+		notBefore := now.UTC().Add(backoffForAttempt(nextAttempt))
+		if nextAttempt >= maxAttempts {
+			status = "failed"
+			notBefore = now.UTC()
+		}
+		if _, execErr := tx.Exec(context.Background(), `
+			UPDATE indexer_search_requests
+			SET status=$2,
+			    attempt_count=$3,
+			    last_error='lease expired; recovered',
+			    not_before=$4,
+			    locked_at=NULL,
+			    locked_by='',
+			    lease_expires_at=NULL,
+			    updated_at=NOW()
+			WHERE id=$1`, id, status, nextAttempt, notBefore); execErr != nil {
+			return 0, execErr
+		}
+		recovered++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(context.Background()); err != nil {
+		return 0, err
+	}
+	return recovered, nil
+}
+
 func (s *PGStore) RescheduleSearchRequest(id int64, lastErr string, notBefore time.Time, terminal bool) error {
 	status := "queued"
 	if terminal {
@@ -260,7 +324,7 @@ func (s *PGStore) RescheduleSearchRequest(id int64, lastErr string, notBefore ti
 	}
 	tag, err := s.db.Exec(context.Background(), `
 		UPDATE indexer_search_requests
-		SET status=$2,last_error=$3,not_before=$4,locked_at=NULL,locked_by='',updated_at=NOW()
+		SET status=$2,last_error=$3,not_before=$4,locked_at=NULL,locked_by='',lease_expires_at=NULL,updated_at=NOW()
 		WHERE id=$1`, id, status, lastErr, notBefore.UTC(),
 	)
 	if err != nil {
@@ -275,7 +339,7 @@ func (s *PGStore) RescheduleSearchRequest(id int64, lastErr string, notBefore ti
 func (s *PGStore) MarkSearchRequestSucceeded(id int64) error {
 	tag, err := s.db.Exec(context.Background(), `
 		UPDATE indexer_search_requests
-		SET status='succeeded', last_error='', locked_at=NULL, locked_by='', updated_at=NOW()
+		SET status='succeeded', last_error='', locked_at=NULL, locked_by='', lease_expires_at=NULL, updated_at=NOW()
 		WHERE id=$1`, id,
 	)
 	if err != nil {
@@ -408,6 +472,214 @@ func (s *PGStore) GetGrabByID(id int64) (GrabRecord, error) {
 		return GrabRecord{}, err
 	}
 	return rec, nil
+}
+
+func (s *PGStore) SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error) {
+	row := s.db.QueryRow(context.Background(), `
+		INSERT INTO indexer_wanted_works
+			(work_id, enabled, priority, cadence_minutes, formats, languages, created_at, updated_at)
+		VALUES
+			($1,$2,$3,$4,$5,$6,NOW(),NOW())
+		ON CONFLICT (work_id) DO UPDATE SET
+			enabled=EXCLUDED.enabled,
+			priority=EXCLUDED.priority,
+			cadence_minutes=EXCLUDED.cadence_minutes,
+			formats=EXCLUDED.formats,
+			languages=EXCLUDED.languages,
+			updated_at=NOW()
+		RETURNING work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at`,
+		rec.WorkID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.Formats, rec.Languages,
+	)
+	updated, err := scanWantedWorkRow(row)
+	if err != nil {
+		return WantedWorkRecord{}, err
+	}
+	return updated, nil
+}
+
+func (s *PGStore) ListWantedWorks() []WantedWorkRecord {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		FROM indexer_wanted_works
+		ORDER BY priority ASC, work_id ASC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]WantedWorkRecord, 0)
+	for rows.Next() {
+		rec, scanErr := scanWantedWorkRow(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (s *PGStore) DeleteWantedWork(workID string) error {
+	tag, err := s.db.Exec(context.Background(), `DELETE FROM indexer_wanted_works WHERE work_id=$1`, workID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) ListDueWantedWorks(now time.Time) []WantedWorkRecord {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT work_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		FROM indexer_wanted_works
+		WHERE enabled=true
+		  AND (
+			last_enqueued_at IS NULL
+			OR (last_enqueued_at + (cadence_minutes * INTERVAL '1 minute')) <= $1
+		  )
+		ORDER BY priority ASC, work_id ASC`, now.UTC())
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]WantedWorkRecord, 0)
+	for rows.Next() {
+		rec, scanErr := scanWantedWorkRow(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (s *PGStore) MarkWantedWorkEnqueued(workID string, now time.Time) error {
+	tag, err := s.db.Exec(context.Background(), `
+		UPDATE indexer_wanted_works
+		SET last_enqueued_at=$2, updated_at=NOW()
+		WHERE work_id=$1`, workID, now.UTC())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, error) {
+	row := s.db.QueryRow(context.Background(), `
+		INSERT INTO indexer_wanted_authors
+			(author_id, enabled, priority, cadence_minutes, formats, languages, created_at, updated_at)
+		VALUES
+			($1,$2,$3,$4,$5,$6,NOW(),NOW())
+		ON CONFLICT (author_id) DO UPDATE SET
+			enabled=EXCLUDED.enabled,
+			priority=EXCLUDED.priority,
+			cadence_minutes=EXCLUDED.cadence_minutes,
+			formats=EXCLUDED.formats,
+			languages=EXCLUDED.languages,
+			updated_at=NOW()
+		RETURNING author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at`,
+		rec.AuthorID, rec.Enabled, rec.Priority, rec.CadenceMinutes, rec.Formats, rec.Languages,
+	)
+	updated, err := scanWantedAuthorRow(row)
+	if err != nil {
+		return WantedAuthorRecord{}, err
+	}
+	return updated, nil
+}
+
+func (s *PGStore) ListWantedAuthors() []WantedAuthorRecord {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		FROM indexer_wanted_authors
+		ORDER BY priority ASC, author_id ASC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]WantedAuthorRecord, 0)
+	for rows.Next() {
+		rec, scanErr := scanWantedAuthorRow(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (s *PGStore) DeleteWantedAuthor(authorID string) error {
+	tag, err := s.db.Exec(context.Background(), `DELETE FROM indexer_wanted_authors WHERE author_id=$1`, authorID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) ListDueWantedAuthors(now time.Time) []WantedAuthorRecord {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT author_id, enabled, priority, cadence_minutes, formats, languages, last_enqueued_at, created_at, updated_at
+		FROM indexer_wanted_authors
+		WHERE enabled=true
+		  AND (
+			last_enqueued_at IS NULL
+			OR (last_enqueued_at + (cadence_minutes * INTERVAL '1 minute')) <= $1
+		  )
+		ORDER BY priority ASC, author_id ASC`, now.UTC())
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]WantedAuthorRecord, 0)
+	for rows.Next() {
+		rec, scanErr := scanWantedAuthorRow(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (s *PGStore) MarkWantedAuthorEnqueued(authorID string, now time.Time) error {
+	tag, err := s.db.Exec(context.Background(), `
+		UPDATE indexer_wanted_authors
+		SET last_enqueued_at=$2, updated_at=NOW()
+		WHERE author_id=$1`, authorID, now.UTC())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) PruneStaleCandidates(maxPerRequest int) (int, error) {
+	if maxPerRequest <= 0 {
+		maxPerRequest = 50
+	}
+	tag, err := s.db.Exec(context.Background(), `
+		WITH ranked AS (
+			SELECT id,
+			       ROW_NUMBER() OVER (PARTITION BY search_request_id ORDER BY created_at DESC, id DESC) AS rn
+			FROM indexer_candidates
+		),
+		to_delete AS (
+			SELECT id FROM ranked WHERE rn > $1
+		)
+		DELETE FROM indexer_candidates c
+		USING to_delete d
+		WHERE c.id = d.id`, maxPerRequest)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (s *PGStore) RecordBackendSearchResult(backendID string, success bool, latency time.Duration, yielded bool) error {
@@ -552,6 +824,7 @@ func scanSearchRequestRow(row scanRow) (SearchRequestRecord, error) {
 		&rec.NotBefore,
 		&rec.LockedAt,
 		&rec.LockedBy,
+		&rec.LeaseExpiresAt,
 		&rec.CreatedAt,
 		&rec.UpdatedAt,
 	); err != nil {
@@ -562,6 +835,60 @@ func scanSearchRequestRow(row scanRow) (SearchRequestRecord, error) {
 	}
 	if err := json.Unmarshal(queryJSON, &rec.Query); err != nil {
 		return SearchRequestRecord{}, fmt.Errorf("decode query_json: %w", err)
+	}
+	return rec, nil
+}
+
+func scanWantedWorkRow(row scanRow) (WantedWorkRecord, error) {
+	var rec WantedWorkRecord
+	if err := row.Scan(
+		&rec.WorkID,
+		&rec.Enabled,
+		&rec.Priority,
+		&rec.CadenceMinutes,
+		&rec.Formats,
+		&rec.Languages,
+		&rec.LastEnqueuedAt,
+		&rec.CreatedAt,
+		&rec.UpdatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return WantedWorkRecord{}, ErrNotFound
+		}
+		return WantedWorkRecord{}, err
+	}
+	if rec.Formats == nil {
+		rec.Formats = []string{}
+	}
+	if rec.Languages == nil {
+		rec.Languages = []string{}
+	}
+	return rec, nil
+}
+
+func scanWantedAuthorRow(row scanRow) (WantedAuthorRecord, error) {
+	var rec WantedAuthorRecord
+	if err := row.Scan(
+		&rec.AuthorID,
+		&rec.Enabled,
+		&rec.Priority,
+		&rec.CadenceMinutes,
+		&rec.Formats,
+		&rec.Languages,
+		&rec.LastEnqueuedAt,
+		&rec.CreatedAt,
+		&rec.UpdatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return WantedAuthorRecord{}, ErrNotFound
+		}
+		return WantedAuthorRecord{}, err
+	}
+	if rec.Formats == nil {
+		rec.Formats = []string{}
+	}
+	if rec.Languages == nil {
+		rec.Languages = []string{}
 	}
 	return rec, nil
 }

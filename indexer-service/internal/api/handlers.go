@@ -97,6 +97,110 @@ func (h *Handlers) EnqueueWorkSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handlers) SetWantedWork(w http.ResponseWriter, r *http.Request) {
+	workID := strings.TrimSpace(mux.Vars(r)["workID"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Enabled        bool     `json:"enabled"`
+		Priority       int      `json:"priority"`
+		CadenceMinutes int      `json:"cadence_minutes"`
+		Formats        []string `json:"formats"`
+		Languages      []string `json:"languages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.CadenceMinutes <= 0 {
+		body.CadenceMinutes = 60
+	}
+	rec, err := h.store.SetWantedWork(indexer.WantedWorkRecord{
+		WorkID:         workID,
+		Enabled:        body.Enabled,
+		Priority:       body.Priority,
+		CadenceMinutes: body.CadenceMinutes,
+		Formats:        body.Formats,
+		Languages:      body.Languages,
+	})
+	if err != nil {
+		writeError(w, "failed to set wanted work", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"item": rec})
+}
+
+func (h *Handlers) ListWantedWorks(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"items": h.store.ListWantedWorks()})
+}
+
+func (h *Handlers) DeleteWantedWork(w http.ResponseWriter, r *http.Request) {
+	workID := strings.TrimSpace(mux.Vars(r)["workID"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.DeleteWantedWork(workID); err != nil {
+		writeError(w, "wanted work not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) SetWantedAuthor(w http.ResponseWriter, r *http.Request) {
+	authorID := strings.TrimSpace(mux.Vars(r)["authorID"])
+	if authorID == "" {
+		writeError(w, "missing author id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Enabled        bool     `json:"enabled"`
+		Priority       int      `json:"priority"`
+		CadenceMinutes int      `json:"cadence_minutes"`
+		Formats        []string `json:"formats"`
+		Languages      []string `json:"languages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.CadenceMinutes <= 0 {
+		body.CadenceMinutes = 60
+	}
+	rec, err := h.store.SetWantedAuthor(indexer.WantedAuthorRecord{
+		AuthorID:       authorID,
+		Enabled:        body.Enabled,
+		Priority:       body.Priority,
+		CadenceMinutes: body.CadenceMinutes,
+		Formats:        body.Formats,
+		Languages:      body.Languages,
+	})
+	if err != nil {
+		writeError(w, "failed to set wanted author", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"item": rec})
+}
+
+func (h *Handlers) ListWantedAuthors(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"items": h.store.ListWantedAuthors()})
+}
+
+func (h *Handlers) DeleteWantedAuthor(w http.ResponseWriter, r *http.Request) {
+	authorID := strings.TrimSpace(mux.Vars(r)["authorID"])
+	if authorID == "" {
+		writeError(w, "missing author id", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.DeleteWantedAuthor(authorID); err != nil {
+		writeError(w, "wanted author not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handlers) GetSearchRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["requestID"]), 10, 64)
 	if err != nil || id <= 0 {

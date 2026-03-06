@@ -12,7 +12,9 @@ var ErrNotFound = errors.New("not found")
 type Store interface {
 	CreateOrGetFromDownload(download downloadqueue.Job, targetRoot string) (Job, error)
 	ClaimNextQueued(workerID string, now time.Time) (Job, bool, error)
+	RecoverExpiredLeases(now time.Time, limit int) (int, error)
 	GetJob(id int64) (Job, error)
+	ExistsDownloadJob(downloadJobID int64) bool
 	ListJobs(filter JobFilter) []Job
 	MarkImported(id int64, targetPath string, naming map[string]any, decision map[string]any) error
 	MarkNeedsReview(id int64, reason string, naming map[string]any, decision map[string]any) error

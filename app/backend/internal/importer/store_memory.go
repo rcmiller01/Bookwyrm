@@ -83,6 +83,11 @@ func (s *MemoryStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool
 	job := *selected
 	job.Status = JobStatusRunning
 	job.AttemptCount++
+	lockTime := now.UTC()
+	job.LockedAt = &lockTime
+	job.LockedBy = workerID
+	leaseExpiresAt := lockTime.Add(ImportJobLeaseTTL)
+	job.LeaseExpiresAt = &leaseExpiresAt
 	job.UpdatedAt = now.UTC()
 	if job.Decision == nil {
 		job.Decision = map[string]any{}
@@ -90,6 +95,53 @@ func (s *MemoryStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool
 	job.Decision["locked_by"] = workerID
 	s.jobsByID[job.ID] = job
 	return job, true, nil
+}
+
+func (s *MemoryStore) RecoverExpiredLeases(now time.Time, limit int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 {
+		limit = 100
+	}
+	recovered := 0
+	for id, job := range s.jobsByID {
+		if recovered >= limit {
+			break
+		}
+		if job.Status != JobStatusRunning || job.LeaseExpiresAt == nil || job.LeaseExpiresAt.After(now.UTC()) {
+			continue
+		}
+		job.AttemptCount++
+		if job.AttemptCount >= job.MaxAttempts {
+			job.Status = JobStatusFailed
+			job.LastError = "lease expired; recovered as failed"
+			metrics.ImportJobsFailedTotal.Inc()
+			metrics.ObserveImportTerminalDuration(job.CreatedAt)
+		} else {
+			job.Status = JobStatusQueued
+			job.LastError = "lease expired; recovered for retry"
+		}
+		job.LockedAt = nil
+		job.LockedBy = ""
+		job.LeaseExpiresAt = nil
+		job.UpdatedAt = now.UTC()
+		s.jobsByID[id] = job
+		event := Event{
+			ID:          s.nextEventID,
+			ImportJobID: job.ID,
+			TS:          now.UTC(),
+			EventType:   "lease_recovered",
+			Message:     "running lease expired; job recovered",
+			Payload: map[string]any{
+				"next_status":   string(job.Status),
+				"attempt_count": job.AttemptCount,
+			},
+		}
+		s.nextEventID++
+		s.eventsByJobID[job.ID] = append(s.eventsByJobID[job.ID], event)
+		recovered++
+	}
+	return recovered, nil
 }
 
 func (s *MemoryStore) GetJob(id int64) (Job, error) {
@@ -100,6 +152,13 @@ func (s *MemoryStore) GetJob(id int64) (Job, error) {
 		return Job{}, ErrNotFound
 	}
 	return job, nil
+}
+
+func (s *MemoryStore) ExistsDownloadJob(downloadJobID int64) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.downloadJobToID[downloadJobID]
+	return ok
 }
 
 func (s *MemoryStore) ListJobs(filter JobFilter) []Job {
@@ -135,6 +194,9 @@ func (s *MemoryStore) MarkImported(id int64, targetPath string, naming map[strin
 	job.NamingResult = cloneMap(naming)
 	job.Decision = cloneMap(decision)
 	job.LastError = ""
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	metrics.ImportJobsImportedTotal.Inc()
@@ -153,6 +215,9 @@ func (s *MemoryStore) MarkNeedsReview(id int64, reason string, naming map[string
 	job.LastError = reason
 	job.NamingResult = cloneMap(naming)
 	job.Decision = cloneMap(decision)
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	metrics.ImportJobsNeedsReviewTotal.Inc()
@@ -172,6 +237,9 @@ func (s *MemoryStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 		job.Status = JobStatusQueued
 	}
 	job.LastError = errMsg
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	if job.Status == JobStatusFailed {
@@ -190,6 +258,9 @@ func (s *MemoryStore) Retry(id int64) error {
 	}
 	job.Status = JobStatusQueued
 	job.LastError = ""
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	return nil
@@ -209,6 +280,9 @@ func (s *MemoryStore) Approve(id int64, workID string, editionID string, templat
 	}
 	job.Status = JobStatusQueued
 	job.LastError = ""
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	return nil
@@ -223,6 +297,9 @@ func (s *MemoryStore) Skip(id int64, reason string) error {
 	}
 	job.Status = JobStatusSkipped
 	job.LastError = reason
+	job.LockedAt = nil
+	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobsByID[id] = job
 	metrics.ImportJobsSkippedTotal.Inc()

@@ -84,7 +84,7 @@ func (s *PGStore) CreateJob(job Job) (Job, error) {
 }
 
 func (s *PGStore) GetJob(id int64) (Job, error) {
-	row := s.db.QueryRowContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE id=$1`, id)
+	row := s.db.QueryRowContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM download_jobs WHERE id=$1`, id)
 	return scanJob(row)
 }
 
@@ -96,13 +96,13 @@ func (s *PGStore) ListJobs(filter JobFilter) []Job {
 	var rows *sql.Rows
 	var err error
 	if filter.Status == "" && filter.Imported == nil {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs ORDER BY created_at DESC LIMIT $1`, limit)
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM download_jobs ORDER BY created_at DESC LIMIT $1`, limit)
 	} else if filter.Imported == nil {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE status=$1 ORDER BY created_at DESC LIMIT $2`, string(filter.Status), limit)
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM download_jobs WHERE status=$1 ORDER BY created_at DESC LIMIT $2`, string(filter.Status), limit)
 	} else if filter.Status == "" {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE imported=$1 ORDER BY created_at DESC LIMIT $2`, *filter.Imported, limit)
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM download_jobs WHERE imported=$1 ORDER BY created_at DESC LIMIT $2`, *filter.Imported, limit)
 	} else {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE status=$1 AND imported=$2 ORDER BY created_at DESC LIMIT $3`, string(filter.Status), *filter.Imported, limit)
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at FROM download_jobs WHERE status=$1 AND imported=$2 ORDER BY created_at DESC LIMIT $3`, string(filter.Status), *filter.Imported, limit)
 	}
 	if err != nil {
 		return nil
@@ -127,7 +127,7 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 	defer tx.Rollback()
 
 	row := tx.QueryRowContext(context.Background(), `
-		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at
 		FROM download_jobs
 		WHERE status='queued' AND not_before <= $1
 		ORDER BY created_at ASC
@@ -143,8 +143,8 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 	}
 	if _, err := tx.ExecContext(context.Background(), `
 		UPDATE download_jobs
-		SET status='submitted',attempt_count=attempt_count+1,locked_at=NOW(),locked_by=$2,updated_at=NOW()
-		WHERE id=$1`, job.ID, workerID,
+		SET status='submitted',attempt_count=attempt_count+1,locked_at=NOW(),locked_by=$2,lease_expires_at=NOW() + ($3 * INTERVAL '1 second'),updated_at=NOW()
+		WHERE id=$1`, job.ID, workerID, int(DownloadJobLeaseTTL.Seconds()),
 	); err != nil {
 		return Job{}, false, err
 	}
@@ -158,12 +158,80 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 	return updated, true, nil
 }
 
+func (s *PGStore) RecoverExpiredLeases(now time.Time, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(context.Background(), `
+		SELECT id, attempt_count, max_attempts
+		FROM download_jobs
+		WHERE status='submitted'
+		  AND lease_expires_at IS NOT NULL
+		  AND lease_expires_at <= $1
+		ORDER BY lease_expires_at ASC
+		FOR UPDATE SKIP LOCKED
+		LIMIT $2`, now.UTC(), limit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	recovered := 0
+	for rows.Next() {
+		var id int64
+		var attemptCount int
+		var maxAttempts int
+		if scanErr := rows.Scan(&id, &attemptCount, &maxAttempts); scanErr != nil {
+			return 0, scanErr
+		}
+		nextAttempt := attemptCount + 1
+		status := string(JobStatusQueued)
+		notBefore := now.UTC().Add(recoveryBackoffForAttempt(nextAttempt))
+		if nextAttempt >= maxAttempts {
+			status = string(JobStatusFailed)
+			notBefore = now.UTC()
+		}
+		if _, execErr := tx.ExecContext(context.Background(), `
+			UPDATE download_jobs
+			SET status=$2,
+			    attempt_count=$3,
+			    last_error='lease expired; recovered',
+			    not_before=$4,
+			    locked_at=NULL,
+			    locked_by='',
+			    lease_expires_at=NULL,
+			    updated_at=NOW()
+			WHERE id=$1`, id, status, nextAttempt, notBefore); execErr != nil {
+			return 0, execErr
+		}
+		if _, execErr := tx.ExecContext(context.Background(), `
+			INSERT INTO download_events(job_id,event_type,message,data_json,created_at)
+			VALUES($1,'lease_recovered','submitted lease expired; job recovered',jsonb_build_object('next_status',$2,'attempt_count',$3),NOW())`, id, status, nextAttempt); execErr != nil {
+			return 0, execErr
+		}
+		recovered++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return recovered, nil
+}
+
 func (s *PGStore) ListActiveJobs(limit int) []Job {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at
 		FROM download_jobs
 		WHERE status IN ('submitted','downloading','repairing','unpacking')
 		ORDER BY updated_at DESC
@@ -189,7 +257,7 @@ func (s *PGStore) ListCompletedNotImported(limit int) []Job {
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),lease_expires_at,created_at,updated_at
 		FROM download_jobs
 		WHERE status='completed' AND imported=false
 		ORDER BY updated_at ASC
@@ -210,7 +278,7 @@ func (s *PGStore) ListCompletedNotImported(limit int) []Job {
 }
 
 func (s *PGStore) MarkSubmitted(id int64, downloadID string) error {
-	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET download_id=$2,status='downloading',locked_at=NULL,locked_by='',updated_at=NOW() WHERE id=$1`, id, downloadID)
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET download_id=$2,status='downloading',locked_at=NULL,locked_by='',lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id, downloadID)
 	if err != nil {
 		return err
 	}
@@ -221,7 +289,7 @@ func (s *PGStore) MarkSubmitted(id int64, downloadID string) error {
 }
 
 func (s *PGStore) UpdateProgress(id int64, status JobStatus, outputPath string, lastErr string) error {
-	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status=$2,output_path=CASE WHEN $3='' THEN output_path ELSE $3 END,last_error=$4,updated_at=NOW() WHERE id=$1`, id, string(status), outputPath, lastErr)
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status=$2,output_path=CASE WHEN $3='' THEN output_path ELSE $3 END,last_error=$4,lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id, string(status), outputPath, lastErr)
 	if err != nil {
 		return err
 	}
@@ -247,7 +315,7 @@ func (s *PGStore) Reschedule(id int64, errMsg string, notBefore time.Time, termi
 	if terminal {
 		status = "failed"
 	}
-	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status=$2,last_error=$3,not_before=$4,locked_at=NULL,locked_by='',updated_at=NOW() WHERE id=$1`, id, status, errMsg, notBefore.UTC())
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status=$2,last_error=$3,not_before=$4,locked_at=NULL,locked_by='',lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id, status, errMsg, notBefore.UTC())
 	if err != nil {
 		return err
 	}
@@ -258,7 +326,7 @@ func (s *PGStore) Reschedule(id int64, errMsg string, notBefore time.Time, termi
 }
 
 func (s *PGStore) CancelJob(id int64) error {
-	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status='canceled',locked_at=NULL,locked_by='',updated_at=NOW() WHERE id=$1`, id)
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status='canceled',locked_at=NULL,locked_by='',lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}
@@ -269,7 +337,7 @@ func (s *PGStore) CancelJob(id int64) error {
 }
 
 func (s *PGStore) RetryJob(id int64) error {
-	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status='queued',last_error='',not_before=NOW(),locked_at=NULL,locked_by='',updated_at=NOW() WHERE id=$1`, id)
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status='queued',last_error='',not_before=NOW(),locked_at=NULL,locked_by='',lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}
@@ -287,6 +355,32 @@ func (s *PGStore) AddEvent(event Event) (Event, error) {
 		return Event{}, err
 	}
 	return event, nil
+}
+
+func (s *PGStore) ListEvents(jobID int64) []Event {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id, job_id, event_type, message, data_json, created_at
+		FROM download_events
+		WHERE job_id=$1
+		ORDER BY created_at ASC, id ASC`, jobID)
+	if err != nil {
+		return []Event{}
+	}
+	defer rows.Close()
+	out := make([]Event, 0)
+	for rows.Next() {
+		var event Event
+		var payload []byte
+		if scanErr := rows.Scan(&event.ID, &event.JobID, &event.EventType, &event.Message, &payload, &event.CreatedAt); scanErr != nil {
+			continue
+		}
+		_ = json.Unmarshal(payload, &event.Data)
+		if event.Data == nil {
+			event.Data = map[string]any{}
+		}
+		out = append(out, event)
+	}
+	return out
 }
 
 func (s *PGStore) RecordClientResult(clientID string, success bool, latency time.Duration, terminalComplete bool) error {
@@ -412,6 +506,7 @@ func scanJob(row rowScanner) (Job, error) {
 		&job.NotBefore,
 		&job.LockedAt,
 		&job.LockedBy,
+		&job.LeaseExpiresAt,
 		&job.CreatedAt,
 		&job.UpdatedAt,
 	); err != nil {

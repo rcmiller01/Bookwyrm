@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -77,6 +78,20 @@ func TestEngineImportsCompletedDownloadIntoFinalLayout(t *testing.T) {
 	}
 	if !updatedDownload.Imported {
 		t.Fatalf("expected download job imported=true")
+	}
+	events := importStore.ListEvents(imported.ID)
+	if len(events) == 0 {
+		t.Fatalf("expected import events to be recorded")
+	}
+	payload := events[len(events)-1].Payload
+	if payload["import_job_id"] != imported.ID {
+		t.Fatalf("expected import_job_id correlation field")
+	}
+	if payload["download_job_id"] != dj.ID {
+		t.Fatalf("expected download_job_id correlation field")
+	}
+	if payload["work_id"] != "work-1" {
+		t.Fatalf("expected work_id correlation field")
 	}
 }
 
@@ -335,6 +350,177 @@ func TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview(t *testing.T) 
 	}
 }
 
+func TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	downloadStore := downloadqueue.NewStore()
+	importStore := NewMemoryStore()
+
+	dj, err := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      301,
+		CandidateID: 301,
+		WorkID:      "work-orphan",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("create download job: %v", err)
+	}
+
+	orphanDir := filepath.Join(libraryRoot, "_incoming", itoa64(dj.ID))
+	mustWriteFileEngine(t, filepath.Join(orphanDir, "leftover.epub"), "orphan-content")
+
+	engine := NewEngine(Config{
+		LibraryRoot:             libraryRoot,
+		AllowCrossDeviceMove:    true,
+		MaxScanFiles:            100,
+		TemplateEbook:           "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+	}, importStore, downloadStore, nil)
+
+	reconciled, err := engine.reconcileIncomingOrphans(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("reconcile incoming orphans failed: %v", err)
+	}
+	if reconciled != 1 {
+		t.Fatalf("expected 1 reconciled orphan, got %d", reconciled)
+	}
+
+	items := importStore.ListJobs(JobFilter{Status: JobStatusNeedsReview, Limit: 10})
+	if len(items) != 1 {
+		t.Fatalf("expected one needs_review import job, got %d", len(items))
+	}
+	job := items[0]
+	if job.DownloadJobID != dj.ID {
+		t.Fatalf("expected download_job_id %d, got %d", dj.ID, job.DownloadJobID)
+	}
+	if filepath.Clean(job.SourcePath) != filepath.Clean(orphanDir) {
+		t.Fatalf("expected source path %s, got %s", orphanDir, job.SourcePath)
+	}
+	if !strings.Contains(strings.ToLower(job.LastError), "orphan incoming") {
+		t.Fatalf("expected orphan incoming last_error, got %q", job.LastError)
+	}
+
+	second, err := engine.reconcileIncomingOrphans(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("second reconcile incoming orphans failed: %v", err)
+	}
+	if second != 0 {
+		t.Fatalf("expected idempotent second reconciliation, got %d", second)
+	}
+}
+
+func TestEngineDecideKeepBothCreatesCopyAndImports(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	original := filepath.Join(libraryRoot, "Unknown Author", "Dune", "Dune.epub")
+	mustWriteFileEngine(t, original, "old-content")
+
+	downloadStore := downloadqueue.NewStore()
+	dj, _ := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      410,
+		CandidateID: 410,
+		WorkID:      "work-410",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	importStore := NewMemoryStore()
+	job, _ := importStore.CreateOrGetFromDownload(dj, libraryRoot)
+
+	incomingDir := filepath.Join(libraryRoot, "_incoming", itoa64(dj.ID))
+	mustWriteFileEngine(t, filepath.Join(incomingDir, "Dune.epub"), "new-content")
+	_ = importStore.MarkNeedsReview(job.ID, "collision", map[string]any{}, map[string]any{"collision": map[string]any{"target_path": original}})
+
+	engine := NewEngine(Config{
+		LibraryRoot:             libraryRoot,
+		AllowCrossDeviceMove:    true,
+		MaxScanFiles:            100,
+		TemplateEbook:           "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+	}, importStore, downloadStore, nil)
+
+	if err := engine.Decide(job.ID, DecisionKeepBoth); err != nil {
+		t.Fatalf("decide keep_both failed: %v", err)
+	}
+
+	copyPath := filepath.Join(libraryRoot, "Unknown Author", "Dune", "Dune (copy).epub")
+	if _, err := os.Stat(copyPath); err != nil {
+		t.Fatalf("expected copied file at %s: %v", copyPath, err)
+	}
+	updated, _ := importStore.GetJob(job.ID)
+	if updated.Status != JobStatusImported {
+		t.Fatalf("expected imported status, got %s", updated.Status)
+	}
+}
+
+func TestEngineDecideReplaceExistingMovesOldToTrash(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	original := filepath.Join(libraryRoot, "Unknown Author", "Dune", "Dune.epub")
+	mustWriteFileEngine(t, original, "old-content")
+
+	downloadStore := downloadqueue.NewStore()
+	dj, _ := downloadStore.CreateJob(downloadqueue.Job{
+		GrabID:      411,
+		CandidateID: 411,
+		WorkID:      "work-411",
+		Protocol:    "usenet",
+		ClientName:  "nzbget",
+		MaxAttempts: 3,
+		NotBefore:   time.Now().UTC(),
+	})
+	importStore := NewMemoryStore()
+	job, _ := importStore.CreateOrGetFromDownload(dj, libraryRoot)
+
+	incomingDir := filepath.Join(libraryRoot, "_incoming", itoa64(dj.ID))
+	mustWriteFileEngine(t, filepath.Join(incomingDir, "Dune.epub"), "new-content")
+	_ = importStore.MarkNeedsReview(job.ID, "collision", map[string]any{}, map[string]any{"collision": map[string]any{"target_path": original}})
+
+	engine := NewEngine(Config{
+		LibraryRoot:             libraryRoot,
+		AllowCrossDeviceMove:    true,
+		MaxScanFiles:            100,
+		TemplateEbook:           "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+	}, importStore, downloadStore, nil)
+
+	if err := engine.Decide(job.ID, DecisionReplaceExisting); err != nil {
+		t.Fatalf("decide replace_existing failed: %v", err)
+	}
+	content, err := os.ReadFile(original)
+	if err != nil {
+		t.Fatalf("expected replaced target to exist: %v", err)
+	}
+	if string(content) != "new-content" {
+		t.Fatalf("expected target content to be replaced")
+	}
+	trashDir := filepath.Join(libraryRoot, "_trash")
+	entries, err := os.ReadDir(trashDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("expected old file moved into trash dir")
+	}
+}
+
+func TestEngineUniqueTrashPathAvoidsCollisions(t *testing.T) {
+	root := t.TempDir()
+	trashDir := filepath.Join(root, "_trash")
+	if err := os.MkdirAll(trashDir, 0o755); err != nil {
+		t.Fatalf("mkdir trash dir: %v", err)
+	}
+	engine := NewEngine(Config{LibraryRoot: root, AllowCrossDeviceMove: true}, NewMemoryStore(), downloadqueue.NewStore(), nil)
+
+	first := engine.uniqueTrashPath(trashDir, "Dune.epub")
+	mustWriteFileEngine(t, first, "existing-trash")
+	second := engine.uniqueTrashPath(trashDir, "Dune.epub")
+	if filepath.Clean(first) == filepath.Clean(second) {
+		t.Fatalf("expected unique trash path when first candidate exists")
+	}
+}
+
 func TestMoveOrCopy_FallbackOnCrossDeviceRename(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src.epub")
@@ -357,6 +543,64 @@ func TestMoveOrCopy_FallbackOnCrossDeviceRename(t *testing.T) {
 	}
 	if _, err := os.Stat(src); !os.IsNotExist(err) {
 		t.Fatalf("expected source file removed after verified copy, err=%v", err)
+	}
+}
+
+func TestCleanupIncomingRemovesOldUnreferencedDirectories(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	downloadStore := downloadqueue.NewStore()
+	importStore := NewMemoryStore()
+	engine := NewEngine(Config{
+		LibraryRoot:          libraryRoot,
+		AllowCrossDeviceMove: true,
+		KeepIncoming:         true,
+		KeepIncomingDays:     1,
+	}, importStore, downloadStore, nil)
+
+	oldDir := filepath.Join(libraryRoot, "_incoming", "99999")
+	mustWriteFileEngine(t, filepath.Join(oldDir, "old.epub"), "stale")
+	oldTime := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(oldDir, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes oldDir: %v", err)
+	}
+
+	removed, err := engine.cleanupIncoming(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("cleanup incoming failed: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("expected one removed incoming directory, got %d", removed)
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("expected old incoming directory removed")
+	}
+}
+
+func TestCleanupTrashRemovesOldFiles(t *testing.T) {
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	engine := NewEngine(Config{
+		LibraryRoot:          libraryRoot,
+		AllowCrossDeviceMove: true,
+		KeepTrashDays:        1,
+	}, NewMemoryStore(), downloadqueue.NewStore(), nil)
+
+	trashDir := filepath.Join(libraryRoot, "_trash")
+	oldFile := filepath.Join(trashDir, "old.epub")
+	mustWriteFileEngine(t, oldFile, "old")
+	oldTime := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(oldFile, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes oldFile: %v", err)
+	}
+
+	removed, err := engine.cleanupTrash(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("cleanup trash failed: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("expected one removed trash artifact, got %d", removed)
+	}
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Fatalf("expected old trash file removed")
 	}
 }
 

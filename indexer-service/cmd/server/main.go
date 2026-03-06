@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ func main() {
 	prowlarrURL := os.Getenv("PROWLARR_BASE_URL")
 	prowlarrAPIKey := os.Getenv("PROWLARR_API_KEY")
 	databaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN"))
+	candidateRetention := atoiOrDefault(envOrDefault("INDEXER_CANDIDATE_RETENTION", "50"), 50)
 
 	svc := indexer.NewService()
 	store, cleanup := initStorage(databaseDSN)
@@ -30,6 +32,7 @@ func main() {
 	mcpRegistry := mcp.NewRegistry(store)
 	mcpRuntime := mcp.NewRuntime()
 	orchestrator := indexer.NewOrchestrator(store, strings.TrimSpace(envOrDefault("INDEXER_QUARANTINE_MODE", "last_resort")))
+	orchestrator.SetCandidateRetention(candidateRetention)
 	orchestrator.Start(rootCtx, 2)
 	reliabilityWorker := indexer.NewReliabilityWorker(store, 2*time.Minute)
 	go reliabilityWorker.Start(rootCtx)
@@ -124,4 +127,16 @@ func envOrDefault(name string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func atoiOrDefault(raw string, fallback int) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	value := 0
+	if _, err := fmt.Sscanf(raw, "%d", &value); err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }

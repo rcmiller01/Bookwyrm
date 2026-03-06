@@ -17,6 +17,7 @@ type Storage interface {
 	GetJob(id int64) (Job, error)
 	ListJobs(filter JobFilter) []Job
 	ClaimNextQueued(workerID string, now time.Time) (Job, bool, error)
+	RecoverExpiredLeases(now time.Time, limit int) (int, error)
 	ListActiveJobs(limit int) []Job
 	ListCompletedNotImported(limit int) []Job
 	MarkSubmitted(id int64, downloadID string) error
@@ -27,6 +28,7 @@ type Storage interface {
 	RetryJob(id int64) error
 
 	AddEvent(event Event) (Event, error)
+	ListEvents(jobID int64) []Event
 
 	RecordClientResult(clientID string, success bool, latency time.Duration, terminalComplete bool) error
 	RecomputeClientReliability() error

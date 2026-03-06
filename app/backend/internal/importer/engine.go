@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +27,8 @@ type Engine struct {
 	metaClient    *metadata.Client
 	renameFn      func(oldpath, newpath string) error
 }
+
+var ErrInvalidDecisionAction = errors.New("invalid decision action")
 
 func NewEngine(cfg Config, store Store, downloadStore downloadqueue.Storage, metaClient *metadata.Client) *Engine {
 	if strings.TrimSpace(cfg.LibraryRoot) == "" {
@@ -44,6 +49,12 @@ func NewEngine(cfg Config, store Store, downloadStore downloadqueue.Storage, met
 	if cfg.MaxPathLen <= 0 {
 		cfg.MaxPathLen = 240
 	}
+	if cfg.KeepIncomingDays < 0 {
+		cfg.KeepIncomingDays = 0
+	}
+	if cfg.KeepTrashDays < 0 {
+		cfg.KeepTrashDays = 0
+	}
 	return &Engine{
 		cfg:           cfg,
 		store:         store,
@@ -54,8 +65,39 @@ func NewEngine(cfg Config, store Store, downloadStore downloadqueue.Storage, met
 }
 
 func (e *Engine) Start(ctx context.Context) {
-	go e.creationLoop(ctx)
-	go e.workerLoop(ctx)
+	e.startWorker(ctx, "creation-loop", e.creationLoop)
+	e.startWorker(ctx, "worker-loop", e.workerLoop)
+	e.startWorker(ctx, "recovery-loop", e.recoveryLoop)
+	e.startWorker(ctx, "incoming-reconcile-loop", e.incomingReconcileLoop)
+	e.startWorker(ctx, "cleanup-loop", e.cleanupLoop)
+}
+
+func (e *Engine) startWorker(ctx context.Context, name string, fn func(context.Context)) {
+	go func() {
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			panicked := false
+			func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						panicked = true
+						log.Printf("importer %s panic: %v\n%s", name, rec, string(debug.Stack()))
+					}
+				}()
+				fn(ctx)
+			}()
+			if !panicked {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+			}
+		}
+	}()
 }
 
 func (e *Engine) creationLoop(ctx context.Context) {
@@ -74,7 +116,7 @@ func (e *Engine) creationLoop(ctx context.Context) {
 				if err != nil {
 					continue
 				}
-				_ = e.store.AddEvent(job.ID, "detected", "import job detected from completed download", map[string]any{
+				e.addEvent(job, "detected", "import job detected from completed download", map[string]any{
 					"download_job_id": dj.ID,
 					"source_path":     dj.OutputPath,
 				})
@@ -98,10 +140,171 @@ func (e *Engine) workerLoop(ctx context.Context) {
 			if err := e.processJob(ctx, job); err != nil {
 				terminal := job.AttemptCount >= job.MaxAttempts
 				_ = e.store.MarkFailed(job.ID, err.Error(), terminal)
-				_ = e.store.AddEvent(job.ID, "error", err.Error(), map[string]any{})
+				e.addEvent(job, "error", err.Error(), map[string]any{})
 			}
 		}
 	}
+}
+
+func (e *Engine) recoveryLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = e.store.RecoverExpiredLeases(time.Now().UTC(), 100)
+		}
+	}
+}
+
+func (e *Engine) incomingReconcileLoop(ctx context.Context) {
+	ticker := time.NewTicker(45 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = e.reconcileIncomingOrphans(time.Now().UTC())
+		}
+	}
+}
+
+func (e *Engine) cleanupLoop(ctx context.Context) {
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = e.cleanupIncoming(time.Now().UTC())
+			_, _ = e.cleanupTrash(time.Now().UTC())
+		}
+	}
+}
+
+func (e *Engine) cleanupIncoming(now time.Time) (int, error) {
+	if !e.cfg.KeepIncoming || e.cfg.KeepIncomingDays <= 0 {
+		return 0, nil
+	}
+	root := filepath.Join(e.cfg.LibraryRoot, "_incoming")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	cutoff := now.Add(-time.Duration(e.cfg.KeepIncomingDays) * 24 * time.Hour)
+	removed := 0
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			continue
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if downloadID, parseErr := strconv.ParseInt(strings.TrimSpace(entry.Name()), 10, 64); parseErr == nil && downloadID > 0 {
+			if e.store.ExistsDownloadJob(downloadID) {
+				continue
+			}
+		}
+		if removeErr := os.RemoveAll(path); removeErr == nil {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
+func (e *Engine) cleanupTrash(now time.Time) (int, error) {
+	if e.cfg.KeepTrashDays <= 0 {
+		return 0, nil
+	}
+	trashDir := os.Getenv("LIBRARY_TRASH_DIR")
+	if strings.TrimSpace(trashDir) == "" {
+		trashDir = filepath.Join(e.cfg.LibraryRoot, "_trash")
+	}
+	entries, err := os.ReadDir(trashDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	cutoff := now.Add(-time.Duration(e.cfg.KeepTrashDays) * 24 * time.Hour)
+	removed := 0
+	for _, entry := range entries {
+		path := filepath.Join(trashDir, entry.Name())
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			continue
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if removeErr := os.RemoveAll(path); removeErr == nil {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
+func (e *Engine) reconcileIncomingOrphans(now time.Time) (int, error) {
+	incomingRoot := filepath.Join(e.cfg.LibraryRoot, "_incoming")
+	entries, err := os.ReadDir(incomingRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	reconciled := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		downloadID, parseErr := strconv.ParseInt(strings.TrimSpace(entry.Name()), 10, 64)
+		if parseErr != nil || downloadID <= 0 {
+			continue
+		}
+		if e.store.ExistsDownloadJob(downloadID) {
+			continue
+		}
+
+		sourcePath := filepath.Join(incomingRoot, entry.Name())
+		downloadJob, getErr := e.downloadStore.GetJob(downloadID)
+		if getErr != nil {
+			downloadJob = downloadqueue.Job{ID: downloadID, OutputPath: sourcePath, WorkID: ""}
+		} else {
+			downloadJob.OutputPath = sourcePath
+		}
+
+		job, createErr := e.store.CreateOrGetFromDownload(downloadJob, e.cfg.LibraryRoot)
+		if createErr != nil {
+			continue
+		}
+		_ = e.store.MarkNeedsReview(job.ID, "orphan incoming directory detected; review required", map[string]any{
+			"mode":        "slice_a3_incoming_reconcile",
+			"detected_at": now.UTC().Format(time.RFC3339),
+		}, map[string]any{
+			"reason":          "orphan_incoming_directory",
+			"source_path":     sourcePath,
+			"download_job_id": downloadID,
+		})
+		e.addEvent(job, "reconciled", "orphan incoming directory reconciled into needs_review", map[string]any{
+			"source_path":     sourcePath,
+			"download_job_id": downloadID,
+		})
+		reconciled++
+	}
+
+	return reconciled, nil
 }
 
 func (e *Engine) processJob(_ context.Context, job Job) error {
@@ -124,7 +327,7 @@ func (e *Engine) processJob(_ context.Context, job Job) error {
 			"candidates": candidates,
 		}
 		_ = e.store.MarkNeedsReview(job.ID, "needs review: ambiguous work/edition match", naming, decision)
-		_ = e.store.AddEvent(job.ID, "warning", "needs review due to low match confidence", decision)
+		e.addEvent(job, "warning", "needs review due to low match confidence", decision)
 		return nil
 	}
 	job = matchedJob
@@ -195,7 +398,7 @@ func (e *Engine) processJob(_ context.Context, job Job) error {
 				"reason":      "existing file differs",
 			}
 			_ = e.store.MarkNeedsReview(job.ID, "target exists with different content; review required", naming, decision)
-			_ = e.store.AddEvent(job.ID, "warning", "collision requires review", map[string]any{
+			e.addEvent(job, "warning", "collision requires review", map[string]any{
 				"target_path": p.TargetPath,
 				"source_path": p.SourcePath,
 			})
@@ -231,11 +434,200 @@ func (e *Engine) processJob(_ context.Context, job Job) error {
 	if err := e.downloadStore.MarkImported(job.DownloadJobID, true); err != nil {
 		return err
 	}
-	_ = e.store.AddEvent(job.ID, "completed", "imported into final library layout", map[string]any{
+	e.addEvent(job, "completed", "imported into final library layout", map[string]any{
 		"target_path": finalTarget,
 		"moved_count": movedCount,
 	})
 	return nil
+}
+
+func (e *Engine) Decide(jobID int64, action DecisionAction) error {
+	if !IsValidDecisionAction(action) {
+		return ErrInvalidDecisionAction
+	}
+	job, err := e.store.GetJob(jobID)
+	if err != nil {
+		return err
+	}
+	if job.Status != JobStatusNeedsReview {
+		return fmt.Errorf("import job is not in needs_review state")
+	}
+	if action == DecisionSkip {
+		if err := e.store.Skip(jobID, "operator decision: skip"); err != nil {
+			return err
+		}
+		e.addEvent(job, "decision_applied", "decision action applied", map[string]any{"action": string(action)})
+		return nil
+	}
+
+	incomingDir := filepath.Join(job.TargetRoot, "_incoming", fmt.Sprintf("%d", job.DownloadJobID))
+	files, scanErr := ScanMediaFiles(incomingDir, e.cfg.MaxScanFiles)
+	if scanErr != nil {
+		return fmt.Errorf("scan incoming dir: %w", scanErr)
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("no staged files found for decision")
+	}
+
+	plans := make([]NamingPlan, 0, len(files))
+	audioCount := 0
+	for _, f := range files {
+		if isAudiobookExt(strings.TrimPrefix(strings.ToLower(filepath.Ext(f.Path)), ".")) {
+			audioCount++
+		}
+	}
+	for _, f := range files {
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(f.Path)), ".")
+		trackMode := isAudiobookExt(ext) && audioCount > 1
+		plans = append(plans, BuildNamingPlan(e.cfg, job, f.Path, trackMode))
+	}
+	if len(plans) == 0 {
+		return fmt.Errorf("no rename plans generated for decision")
+	}
+
+	applied := make([]map[string]any, 0, len(plans))
+	for _, plan := range plans {
+		target := plan.TargetPath
+		switch action {
+		case DecisionKeepBoth:
+			target = e.nextKeepBothPath(plan.TargetPath)
+		case DecisionReplaceExisting:
+			if err := e.moveExistingToTrash(plan.TargetPath); err != nil {
+				return err
+			}
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := e.moveOrCopy(plan.SourcePath, target); err != nil {
+			return err
+		}
+		if info, statErr := os.Stat(target); statErr == nil {
+			_, _ = e.store.UpsertLibraryItem(LibraryItem{
+				WorkID:    fallback(job.WorkID, "unknown-work"),
+				EditionID: job.EditionID,
+				Path:      target,
+				Format:    formatFromExt(filepath.Ext(target)),
+				SizeBytes: info.Size(),
+			})
+		}
+		applied = append(applied, map[string]any{
+			"source_path": plan.SourcePath,
+			"target_path": target,
+		})
+	}
+
+	if !e.cfg.KeepIncoming {
+		_ = os.RemoveAll(incomingDir)
+	}
+
+	if len(applied) == 0 {
+		return fmt.Errorf("no decision paths were applied")
+	}
+	finalTargetPath, ok := applied[0]["target_path"].(string)
+	if !ok || strings.TrimSpace(finalTargetPath) == "" {
+		return fmt.Errorf("invalid decision final target path")
+	}
+	finalTarget := filepath.Dir(finalTargetPath)
+	decision := cloneDecision(job.Decision)
+	decision["action"] = string(action)
+	decision["applied_paths"] = applied
+	naming := cloneDecision(job.NamingResult)
+	naming["mode"] = "slice_b_decision_applied"
+
+	if err := e.store.MarkImported(jobID, finalTarget, naming, decision); err != nil {
+		return err
+	}
+	if err := e.downloadStore.MarkImported(job.DownloadJobID, true); err != nil {
+		return err
+	}
+	e.addEvent(job, "decision_applied", "decision action applied", map[string]any{"action": string(action), "final_target": finalTarget})
+	return nil
+}
+
+func (e *Engine) addEvent(job Job, eventType string, message string, payload map[string]any) {
+	_ = e.store.AddEvent(job.ID, eventType, message, e.withCorrelation(job, payload))
+}
+
+func (e *Engine) withCorrelation(job Job, payload map[string]any) map[string]any {
+	out := map[string]any{
+		"import_job_id":   job.ID,
+		"download_job_id": job.DownloadJobID,
+		"work_id":         job.WorkID,
+		"edition_id":      job.EditionID,
+	}
+	if payload != nil {
+		for k, v := range payload {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func (e *Engine) nextKeepBothPath(original string) string {
+	dir := filepath.Dir(original)
+	ext := filepath.Ext(original)
+	base := strings.TrimSuffix(filepath.Base(original), ext)
+	candidate := filepath.Join(dir, base+" (copy)"+ext)
+	if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+		return candidate
+	}
+	for i := 2; i <= 1000; i++ {
+		candidate = filepath.Join(dir, fmt.Sprintf("%s (copy %d)%s", base, i, ext))
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+	}
+	return filepath.Join(dir, fmt.Sprintf("%s (copy-%d)%s", base, time.Now().UTC().Unix(), ext))
+}
+
+func (e *Engine) moveExistingToTrash(target string) error {
+	if _, err := os.Stat(target); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	trashDir := os.Getenv("LIBRARY_TRASH_DIR")
+	if strings.TrimSpace(trashDir) == "" {
+		trashDir = filepath.Join(e.cfg.LibraryRoot, "_trash")
+	}
+	if err := os.MkdirAll(trashDir, 0o755); err != nil {
+		return err
+	}
+	base := filepath.Base(target)
+	trashPath := e.uniqueTrashPath(trashDir, base)
+	if err := e.moveOrCopy(target, trashPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (e *Engine) uniqueTrashPath(trashDir string, base string) string {
+	stamp := time.Now().UTC().Format("20060102T150405.000000000")
+	candidate := filepath.Join(trashDir, fmt.Sprintf("%s.%s", base, stamp))
+	if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+		return candidate
+	}
+	for i := 1; i <= 1000; i++ {
+		candidate = filepath.Join(trashDir, fmt.Sprintf("%s.%s.%d", base, stamp, i))
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+	}
+	return filepath.Join(trashDir, fmt.Sprintf("%s.%d", base, time.Now().UTC().UnixNano()))
+}
+
+func cloneDecision(in map[string]any) map[string]any {
+	if in == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func (e *Engine) moveOrCopy(src string, dst string) error {

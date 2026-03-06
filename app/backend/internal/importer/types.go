@@ -2,7 +2,26 @@ package importer
 
 import "time"
 
+const ImportJobLeaseTTL = 2 * time.Minute
+
 type JobStatus string
+
+type DecisionAction string
+
+const (
+	DecisionKeepBoth        DecisionAction = "keep_both"
+	DecisionReplaceExisting DecisionAction = "replace_existing"
+	DecisionSkip            DecisionAction = "skip"
+)
+
+func IsValidDecisionAction(action DecisionAction) bool {
+	switch action {
+	case DecisionKeepBoth, DecisionReplaceExisting, DecisionSkip:
+		return true
+	default:
+		return false
+	}
+}
 
 const (
 	JobStatusQueued      JobStatus = "queued"
@@ -28,6 +47,9 @@ type Job struct {
 	NamingResult   map[string]any `json:"naming_result_json,omitempty"`
 	Decision       map[string]any `json:"decision_json,omitempty"`
 	LastError      string         `json:"last_error,omitempty"`
+	LockedAt       *time.Time     `json:"locked_at,omitempty"`
+	LockedBy       string         `json:"locked_by,omitempty"`
+	LeaseExpiresAt *time.Time     `json:"lease_expires_at,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 }
@@ -66,4 +88,6 @@ type Config struct {
 	MaxPathLen              int
 	ReplaceColon            bool
 	KeepIncoming            bool
+	KeepIncomingDays        int
+	KeepTrashDays           int
 }

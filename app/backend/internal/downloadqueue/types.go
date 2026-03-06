@@ -2,6 +2,8 @@ package downloadqueue
 
 import "time"
 
+const DownloadJobLeaseTTL = 2 * time.Minute
+
 type JobStatus string
 
 const (
@@ -47,6 +49,7 @@ type Job struct {
 	NotBefore      time.Time      `json:"not_before"`
 	LockedAt       *time.Time     `json:"locked_at,omitempty"`
 	LockedBy       string         `json:"locked_by,omitempty"`
+	LeaseExpiresAt *time.Time     `json:"lease_expires_at,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 }

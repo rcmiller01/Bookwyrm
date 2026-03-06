@@ -2,6 +2,8 @@ package indexer
 
 import "time"
 
+const SearchRequestLeaseTTL = 2 * time.Minute
+
 type MetadataSnapshot struct {
 	WorkID          string   `json:"work_id"`
 	EditionID       string   `json:"edition_id,omitempty"`
@@ -143,20 +145,21 @@ type MCPServerRecord struct {
 }
 
 type SearchRequestRecord struct {
-	ID           int64      `json:"id"`
-	RequestKey   string     `json:"request_key"`
-	EntityType   string     `json:"entity_type"`
-	EntityID     string     `json:"entity_id"`
-	Query        QuerySpec  `json:"query_json"`
-	Status       string     `json:"status"`
-	AttemptCount int        `json:"attempt_count"`
-	MaxAttempts  int        `json:"max_attempts"`
-	LastError    string     `json:"last_error,omitempty"`
-	NotBefore    time.Time  `json:"not_before"`
-	LockedAt     *time.Time `json:"locked_at,omitempty"`
-	LockedBy     string     `json:"locked_by,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID             int64      `json:"id"`
+	RequestKey     string     `json:"request_key"`
+	EntityType     string     `json:"entity_type"`
+	EntityID       string     `json:"entity_id"`
+	Query          QuerySpec  `json:"query_json"`
+	Status         string     `json:"status"`
+	AttemptCount   int        `json:"attempt_count"`
+	MaxAttempts    int        `json:"max_attempts"`
+	LastError      string     `json:"last_error,omitempty"`
+	NotBefore      time.Time  `json:"not_before"`
+	LockedAt       *time.Time `json:"locked_at,omitempty"`
+	LockedBy       string     `json:"locked_by,omitempty"`
+	LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type CandidateRecord struct {
@@ -175,4 +178,28 @@ type GrabRecord struct {
 	DownstreamRef string    `json:"downstream_ref,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type WantedWorkRecord struct {
+	WorkID         string     `json:"work_id"`
+	Enabled        bool       `json:"enabled"`
+	Priority       int        `json:"priority"`
+	CadenceMinutes int        `json:"cadence_minutes"`
+	Formats        []string   `json:"formats,omitempty"`
+	Languages      []string   `json:"languages,omitempty"`
+	LastEnqueuedAt *time.Time `json:"last_enqueued_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type WantedAuthorRecord struct {
+	AuthorID       string     `json:"author_id"`
+	Enabled        bool       `json:"enabled"`
+	Priority       int        `json:"priority"`
+	CadenceMinutes int        `json:"cadence_minutes"`
+	Formats        []string   `json:"formats,omitempty"`
+	Languages      []string   `json:"languages,omitempty"`
+	LastEnqueuedAt *time.Time `json:"last_enqueued_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }

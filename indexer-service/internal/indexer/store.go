@@ -26,6 +26,8 @@ type Store struct {
 	candidatesByReq map[int64][]CandidateRecord
 	candidateByID   map[int64]CandidateRecord
 	grabsByID       map[int64]GrabRecord
+	wantedWorks     map[string]WantedWorkRecord
+	wantedAuthors   map[string]WantedAuthorRecord
 	backendMetrics  map[string]indexerMetrics
 }
 
@@ -49,6 +51,8 @@ func NewStore() *Store {
 		candidatesByReq: map[int64][]CandidateRecord{},
 		candidateByID:   map[int64]CandidateRecord{},
 		grabsByID:       map[int64]GrabRecord{},
+		wantedWorks:     map[string]WantedWorkRecord{},
+		wantedAuthors:   map[string]WantedAuthorRecord{},
 		backendMetrics:  map[string]indexerMetrics{},
 	}
 }
@@ -275,10 +279,47 @@ func (s *Store) TryLockNextSearchRequest(workerID string, now time.Time) (Search
 	lockedAt := now.UTC()
 	rec.LockedAt = &lockedAt
 	rec.LockedBy = workerID
+	leaseExpiresAt := lockedAt.Add(SearchRequestLeaseTTL)
+	rec.LeaseExpiresAt = &leaseExpiresAt
 	rec.AttemptCount++
 	rec.UpdatedAt = lockedAt
 	s.searchRequests[rec.ID] = rec
 	return rec, true, nil
+}
+
+func (s *Store) RecoverExpiredSearchRequests(now time.Time, limit int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 {
+		limit = 100
+	}
+	recovered := 0
+	for id := range s.searchRequests {
+		if recovered >= limit {
+			break
+		}
+		rec := s.searchRequests[id]
+		if rec.Status != "running" || rec.LeaseExpiresAt == nil || rec.LeaseExpiresAt.After(now) {
+			continue
+		}
+		nextAttempt := rec.AttemptCount + 1
+		rec.AttemptCount = nextAttempt
+		rec.LastError = "lease expired; recovered"
+		rec.LockedAt = nil
+		rec.LockedBy = ""
+		rec.LeaseExpiresAt = nil
+		rec.UpdatedAt = now.UTC()
+		if nextAttempt >= rec.MaxAttempts {
+			rec.Status = "failed"
+			rec.NotBefore = now.UTC()
+		} else {
+			rec.Status = "queued"
+			rec.NotBefore = now.UTC().Add(backoffForAttempt(nextAttempt))
+		}
+		s.searchRequests[id] = rec
+		recovered++
+	}
+	return recovered, nil
 }
 
 func (s *Store) RescheduleSearchRequest(id int64, lastErr string, notBefore time.Time, terminal bool) error {
@@ -297,6 +338,7 @@ func (s *Store) RescheduleSearchRequest(id int64, lastErr string, notBefore time
 	rec.NotBefore = notBefore.UTC()
 	rec.LockedAt = nil
 	rec.LockedBy = ""
+	rec.LeaseExpiresAt = nil
 	rec.UpdatedAt = time.Now().UTC()
 	s.searchRequests[id] = rec
 	return nil
@@ -313,6 +355,7 @@ func (s *Store) MarkSearchRequestSucceeded(id int64) error {
 	rec.LastError = ""
 	rec.LockedAt = nil
 	rec.LockedBy = ""
+	rec.LeaseExpiresAt = nil
 	rec.UpdatedAt = time.Now().UTC()
 	s.searchRequests[id] = rec
 	return nil
@@ -397,6 +440,198 @@ func (s *Store) GetGrabByID(id int64) (GrabRecord, error) {
 		return GrabRecord{}, ErrNotFound
 	}
 	return rec, nil
+}
+
+func (s *Store) SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(rec.WorkID) == "" {
+		return WantedWorkRecord{}, ErrNotFound
+	}
+	now := time.Now().UTC()
+	existing, ok := s.wantedWorks[rec.WorkID]
+	if ok {
+		rec.CreatedAt = existing.CreatedAt
+		rec.LastEnqueuedAt = existing.LastEnqueuedAt
+	} else {
+		rec.CreatedAt = now
+	}
+	rec.UpdatedAt = now
+	if rec.CadenceMinutes <= 0 {
+		rec.CadenceMinutes = 60
+	}
+	s.wantedWorks[rec.WorkID] = rec
+	return rec, nil
+}
+
+func (s *Store) ListWantedWorks() []WantedWorkRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]WantedWorkRecord, 0, len(s.wantedWorks))
+	for _, rec := range s.wantedWorks {
+		out = append(out, rec)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Priority == out[j].Priority {
+			return out[i].WorkID < out[j].WorkID
+		}
+		return out[i].Priority < out[j].Priority
+	})
+	return out
+}
+
+func (s *Store) DeleteWantedWork(workID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.wantedWorks[workID]; !ok {
+		return ErrNotFound
+	}
+	delete(s.wantedWorks, workID)
+	return nil
+}
+
+func (s *Store) ListDueWantedWorks(now time.Time) []WantedWorkRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	due := make([]WantedWorkRecord, 0)
+	for _, rec := range s.wantedWorks {
+		if !rec.Enabled {
+			continue
+		}
+		if rec.LastEnqueuedAt == nil || rec.LastEnqueuedAt.Add(time.Duration(rec.CadenceMinutes)*time.Minute).Before(now) || rec.LastEnqueuedAt.Add(time.Duration(rec.CadenceMinutes)*time.Minute).Equal(now) {
+			due = append(due, rec)
+		}
+	}
+	sort.SliceStable(due, func(i, j int) bool {
+		if due[i].Priority == due[j].Priority {
+			return due[i].WorkID < due[j].WorkID
+		}
+		return due[i].Priority < due[j].Priority
+	})
+	return due
+}
+
+func (s *Store) MarkWantedWorkEnqueued(workID string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.wantedWorks[workID]
+	if !ok {
+		return ErrNotFound
+	}
+	ts := now.UTC()
+	rec.LastEnqueuedAt = &ts
+	rec.UpdatedAt = ts
+	s.wantedWorks[workID] = rec
+	return nil
+}
+
+func (s *Store) SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(rec.AuthorID) == "" {
+		return WantedAuthorRecord{}, ErrNotFound
+	}
+	now := time.Now().UTC()
+	existing, ok := s.wantedAuthors[rec.AuthorID]
+	if ok {
+		rec.CreatedAt = existing.CreatedAt
+		rec.LastEnqueuedAt = existing.LastEnqueuedAt
+	} else {
+		rec.CreatedAt = now
+	}
+	rec.UpdatedAt = now
+	if rec.CadenceMinutes <= 0 {
+		rec.CadenceMinutes = 60
+	}
+	s.wantedAuthors[rec.AuthorID] = rec
+	return rec, nil
+}
+
+func (s *Store) ListWantedAuthors() []WantedAuthorRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]WantedAuthorRecord, 0, len(s.wantedAuthors))
+	for _, rec := range s.wantedAuthors {
+		out = append(out, rec)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Priority == out[j].Priority {
+			return out[i].AuthorID < out[j].AuthorID
+		}
+		return out[i].Priority < out[j].Priority
+	})
+	return out
+}
+
+func (s *Store) DeleteWantedAuthor(authorID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.wantedAuthors[authorID]; !ok {
+		return ErrNotFound
+	}
+	delete(s.wantedAuthors, authorID)
+	return nil
+}
+
+func (s *Store) ListDueWantedAuthors(now time.Time) []WantedAuthorRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	due := make([]WantedAuthorRecord, 0)
+	for _, rec := range s.wantedAuthors {
+		if !rec.Enabled {
+			continue
+		}
+		if rec.LastEnqueuedAt == nil || rec.LastEnqueuedAt.Add(time.Duration(rec.CadenceMinutes)*time.Minute).Before(now) || rec.LastEnqueuedAt.Add(time.Duration(rec.CadenceMinutes)*time.Minute).Equal(now) {
+			due = append(due, rec)
+		}
+	}
+	sort.SliceStable(due, func(i, j int) bool {
+		if due[i].Priority == due[j].Priority {
+			return due[i].AuthorID < due[j].AuthorID
+		}
+		return due[i].Priority < due[j].Priority
+	})
+	return due
+}
+
+func (s *Store) MarkWantedAuthorEnqueued(authorID string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.wantedAuthors[authorID]
+	if !ok {
+		return ErrNotFound
+	}
+	ts := now.UTC()
+	rec.LastEnqueuedAt = &ts
+	rec.UpdatedAt = ts
+	s.wantedAuthors[authorID] = rec
+	return nil
+}
+
+func (s *Store) PruneStaleCandidates(maxPerRequest int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if maxPerRequest <= 0 {
+		maxPerRequest = 50
+	}
+	pruned := 0
+	for requestID, recs := range s.candidatesByReq {
+		if len(recs) <= maxPerRequest {
+			continue
+		}
+		sort.SliceStable(recs, func(i, j int) bool {
+			if recs[i].CreatedAt.Equal(recs[j].CreatedAt) {
+				return recs[i].ID > recs[j].ID
+			}
+			return recs[i].CreatedAt.After(recs[j].CreatedAt)
+		})
+		for _, rec := range recs[maxPerRequest:] {
+			delete(s.candidateByID, rec.ID)
+			pruned++
+		}
+		s.candidatesByReq[requestID] = append([]CandidateRecord(nil), recs[:maxPerRequest]...)
+	}
+	return pruned, nil
 }
 
 func (s *Store) RecordBackendSearchResult(backendID string, success bool, latency time.Duration, yielded bool) error {

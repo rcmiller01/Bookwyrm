@@ -1,14 +1,14 @@
 package importer
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 )
 
 var invalidPathChars = []string{`<`, `>`, `"`, `|`, `?`, `*`}
 
 func SanitizeRelativePath(rel string, replaceColon bool, maxPathLen int) string {
-	parts := strings.Split(filepath.ToSlash(rel), "/")
+	parts := strings.Split(strings.ReplaceAll(rel, "\\", "/"), "/")
 	outParts := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -33,7 +33,11 @@ func SanitizeRelativePath(rel string, replaceColon bool, maxPathLen int) string 
 		}
 		outParts = append(outParts, p)
 	}
-	clean := filepath.Clean(strings.Join(outParts, string(filepath.Separator)))
+	clean := path.Clean(strings.Join(outParts, "/"))
+	if clean == "." {
+		clean = ""
+	}
+	clean = strings.ReplaceAll(clean, "/", "\\")
 	if maxPathLen > 0 && len(clean) > maxPathLen {
 		clean = clean[:maxPathLen]
 	}

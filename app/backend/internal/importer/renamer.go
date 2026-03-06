@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -29,7 +30,7 @@ func BuildNamingPlan(cfg Config, job Job, sourcePath string, audiobookTrackMode 
 		folderRel := ApplyTemplate(cfg.TemplateAudiobookFolder, values)
 		folderRel = SanitizeRelativePath(folderRel, cfg.ReplaceColon, cfg.MaxPathLen)
 		name := SanitizeRelativePath(filepath.Base(sourcePath), cfg.ReplaceColon, cfg.MaxPathLen)
-		rel = filepath.Clean(filepath.Join(folderRel, name))
+		rel = cleanRelativeForStyle(joinWithStyle(folderRel, name, pathStyleForRoot(cfg.LibraryRoot)), pathStyleForRoot(cfg.LibraryRoot))
 	} else {
 		tpl := cfg.TemplateEbook
 		if isAudiobookExt(ext) {
@@ -38,12 +39,51 @@ func BuildNamingPlan(cfg Config, job Job, sourcePath string, audiobookTrackMode 
 		rel = ApplyTemplate(tpl, values)
 		rel = SanitizeRelativePath(rel, cfg.ReplaceColon, cfg.MaxPathLen)
 	}
-	target := filepath.Clean(filepath.Join(cfg.LibraryRoot, rel))
+	target := joinWithStyle(cfg.LibraryRoot, rel, pathStyleForRoot(cfg.LibraryRoot))
 	return NamingPlan{
 		SourcePath: sourcePath,
 		TargetPath: target,
 		Format:     ext,
 	}
+}
+
+func pathStyleForRoot(root string) string {
+	if strings.Contains(root, "\\") {
+		return "\\"
+	}
+	return "/"
+}
+
+func joinWithStyle(base string, rel string, separator string) string {
+	if separator == "\\" {
+		baseClean := cleanRelativeForStyle(base, separator)
+		relClean := cleanRelativeForStyle(rel, separator)
+		if baseClean == "" {
+			return relClean
+		}
+		if relClean == "" {
+			return baseClean
+		}
+		return baseClean + separator + relClean
+	}
+	return filepath.Clean(filepath.Join(base, filepath.FromSlash(strings.ReplaceAll(rel, "\\", "/"))))
+}
+
+func cleanRelativeForStyle(value string, separator string) string {
+	v := strings.TrimSpace(value)
+	v = strings.ReplaceAll(v, "\\", "/")
+	v = strings.Trim(v, "/")
+	if v == "" {
+		return ""
+	}
+	v = path.Clean(v)
+	if v == "." {
+		return ""
+	}
+	if separator == "\\" {
+		return strings.ReplaceAll(v, "/", "\\")
+	}
+	return v
 }
 
 func isAudiobookExt(ext string) bool {

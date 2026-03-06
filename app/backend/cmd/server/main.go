@@ -48,6 +48,8 @@ func main() {
 	namingReplaceColon := strings.EqualFold(envOrDefault("NAMING_REPLACE_COLON", "true"), "true")
 	keepIncomingRaw, keepIncomingSource := envOrDefaultWithSource("IMPORT_KEEP_INCOMING", "true")
 	keepIncoming := strings.EqualFold(keepIncomingRaw, "true")
+	keepIncomingDays := atoiOrDefault(envOrDefault("LIBRARY_KEEP_INCOMING_DAYS", "14"), 14)
+	keepTrashDays := atoiOrDefault(envOrDefault("LIBRARY_KEEP_TRASH_DAYS", "30"), 30)
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 	domainName := envOrDefault("APP_DOMAIN", "books")
@@ -111,6 +113,8 @@ func main() {
 		MaxPathLen:              namingMaxPathLen,
 		ReplaceColon:            namingReplaceColon,
 		KeepIncoming:            keepIncoming,
+		KeepIncomingDays:        keepIncomingDays,
+		KeepTrashDays:           keepTrashDays,
 	}, importStore, downloadStore, metaClient)
 	importEngine.Start(context.Background())
 
@@ -130,6 +134,7 @@ func main() {
 	h.SetJobService(jobService)
 	h.SetDownloadManager(downloadManager)
 	h.SetImportStore(importStore)
+	h.SetImportEngine(importEngine)
 	h.SetImportConfig(api.ImportConfig{
 		KeepIncoming: keepIncoming,
 		Source:       keepIncomingSource,

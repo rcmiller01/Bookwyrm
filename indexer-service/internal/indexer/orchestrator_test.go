@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 )
 
 type recordingBackend struct {
@@ -116,5 +117,54 @@ func TestOrchestratorQuarantineDisabledSkipsQuarantinedBackends(t *testing.T) {
 
 	if len(callOrder) != 1 || callOrder[0] != "primary" {
 		t.Fatalf("expected only primary backend to run, got %v", callOrder)
+	}
+}
+
+func TestOrchestratorEnqueueDueWantedCreatesRequestsAndMarksEnqueued(t *testing.T) {
+	store := NewStore()
+	orch := NewOrchestrator(store, "last_resort")
+	now := time.Now().UTC()
+
+	_, err := store.SetWantedWork(WantedWorkRecord{
+		WorkID:         "work-42",
+		Enabled:        true,
+		Priority:       10,
+		CadenceMinutes: 60,
+		Formats:        []string{"epub"},
+		Languages:      []string{"en"},
+	})
+	if err != nil {
+		t.Fatalf("set wanted work failed: %v", err)
+	}
+	_, err = store.SetWantedAuthor(WantedAuthorRecord{
+		AuthorID:       "author-42",
+		Enabled:        true,
+		Priority:       20,
+		CadenceMinutes: 60,
+	})
+	if err != nil {
+		t.Fatalf("set wanted author failed: %v", err)
+	}
+
+	orch.enqueueDueWanted(now)
+
+	workQuery := QuerySpec{EntityType: "work", EntityID: "work-42"}
+	workQuery.Preferences.Formats = []string{"epub"}
+	workQuery.Preferences.Languages = []string{"en"}
+	workReq := store.CreateOrGetSearchRequest(buildRequestKey(workQuery), workQuery, 3)
+	if workReq.ID <= 0 {
+		t.Fatalf("expected enqueued work search request")
+	}
+	authorQuery := QuerySpec{EntityType: "author", EntityID: "author-42"}
+	authorReq := store.CreateOrGetSearchRequest(buildRequestKey(authorQuery), authorQuery, 3)
+	if authorReq.ID <= 0 {
+		t.Fatalf("expected enqueued author search request")
+	}
+
+	if due := store.ListDueWantedWorks(now); len(due) != 0 {
+		t.Fatalf("expected no immediately due wanted works after enqueue, got %d", len(due))
+	}
+	if due := store.ListDueWantedAuthors(now); len(due) != 0 {
+		t.Fatalf("expected no immediately due wanted authors after enqueue, got %d", len(due))
 	}
 }

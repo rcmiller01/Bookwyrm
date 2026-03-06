@@ -2,7 +2,10 @@ package downloadqueue
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -88,16 +91,45 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 		JobID:     job.ID,
 		EventType: "queued",
 		Message:   "download job queued from grab",
-		Data:      map[string]any{"grab_id": grabID, "candidate_id": grab.CandidateID},
+		Data:      m.withCorrelation(job, map[string]any{"grab_id": grabID, "candidate_id": grab.CandidateID}),
 		CreatedAt: time.Now().UTC(),
 	})
 	return job, nil
 }
 
 func (m *Manager) Start(ctx context.Context) {
-	go m.submitWorker(ctx)
-	go m.pollWorker(ctx)
-	go m.reliabilityWorker(ctx)
+	m.startWorker(ctx, "submit-worker", m.submitWorker)
+	m.startWorker(ctx, "poll-worker", m.pollWorker)
+	m.startWorker(ctx, "recovery-worker", m.recoveryWorker)
+	m.startWorker(ctx, "reliability-worker", m.reliabilityWorker)
+}
+
+func (m *Manager) startWorker(ctx context.Context, name string, fn func(context.Context)) {
+	go func() {
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			panicked := false
+			func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						panicked = true
+						log.Printf("download manager %s panic: %v\n%s", name, rec, string(debug.Stack()))
+					}
+				}()
+				fn(ctx)
+			}()
+			if !panicked {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+			}
+		}
+	}()
 }
 
 func (m *Manager) ListJobs(filter JobFilter) []Job {
@@ -108,6 +140,10 @@ func (m *Manager) GetJob(id int64) (Job, error) {
 	return m.store.GetJob(id)
 }
 
+func (m *Manager) ListEvents(jobID int64) []Event {
+	return m.store.ListEvents(jobID)
+}
+
 func (m *Manager) CancelJob(id int64) error {
 	if err := m.store.CancelJob(id); err != nil {
 		return err
@@ -116,7 +152,7 @@ func (m *Manager) CancelJob(id int64) error {
 		JobID:     id,
 		EventType: "canceled",
 		Message:   "download job canceled",
-		Data:      map[string]any{},
+		Data:      map[string]any{"download_job_id": id},
 	})
 	return nil
 }
@@ -129,7 +165,7 @@ func (m *Manager) RetryJob(id int64) error {
 		JobID:     id,
 		EventType: "retry",
 		Message:   "download job retried",
-		Data:      map[string]any{},
+		Data:      map[string]any{"download_job_id": id},
 	})
 	return nil
 }
@@ -171,7 +207,7 @@ func (m *Manager) submitWorker(ctx context.Context) {
 					JobID:     job.ID,
 					EventType: "submit_failed",
 					Message:   addErr.Error(),
-					Data:      map[string]any{},
+					Data:      m.withCorrelation(job, map[string]any{}),
 				})
 				continue
 			}
@@ -181,7 +217,7 @@ func (m *Manager) submitWorker(ctx context.Context) {
 				JobID:     job.ID,
 				EventType: "submitted",
 				Message:   "download submitted",
-				Data:      map[string]any{"download_id": downloadID, "client": job.ClientName},
+				Data:      m.withCorrelation(job, map[string]any{"download_id": downloadID, "client": job.ClientName}),
 			})
 		}
 	}
@@ -200,16 +236,30 @@ func (m *Manager) pollWorker(ctx context.Context) {
 					continue
 				}
 				start := time.Now()
-				status, _, err := m.downloadSvc.GetStatus(ctx, job.ClientName, job.DownloadID)
+				status, err := m.getStatusWithFallback(ctx, job)
 				if err != nil {
 					_ = m.store.RecordClientResult(job.ClientName, false, time.Since(start), false)
-					_ = m.store.UpdateProgress(job.ID, JobStatusFailed, "", err.Error())
-					_, _ = m.store.AddEvent(Event{
-						JobID:     job.ID,
-						EventType: "poll_failed",
-						Message:   err.Error(),
-						Data:      map[string]any{},
-					})
+					if errors.Is(err, download.ErrDownloadNotFound) {
+						reason := "missing downstream job"
+						_ = m.store.UpdateProgress(job.ID, JobStatusFailed, "", reason)
+						_, _ = m.store.AddEvent(Event{
+							JobID:     job.ID,
+							EventType: "downstream_missing",
+							Message:   reason,
+							Data: m.withCorrelation(job, map[string]any{
+								"download_id": job.DownloadID,
+								"client":      job.ClientName,
+							}),
+						})
+					} else {
+						_ = m.store.UpdateProgress(job.ID, JobStatusFailed, "", err.Error())
+						_, _ = m.store.AddEvent(Event{
+							JobID:     job.ID,
+							EventType: "poll_failed",
+							Message:   err.Error(),
+							Data:      m.withCorrelation(job, map[string]any{}),
+						})
+					}
 					continue
 				}
 				nextStatus := normalizeState(status.State)
@@ -220,12 +270,42 @@ func (m *Manager) pollWorker(ctx context.Context) {
 						JobID:     job.ID,
 						EventType: "terminal",
 						Message:   string(nextStatus),
-						Data:      map[string]any{"output_path": status.OutputPath},
+						Data:      m.withCorrelation(job, map[string]any{"output_path": status.OutputPath}),
 					})
 				}
 			}
 		}
 	}
+}
+
+func (m *Manager) getStatusWithFallback(ctx context.Context, job Job) (download.DownloadStatus, error) {
+	status, _, err := m.downloadSvc.GetStatus(ctx, job.ClientName, job.DownloadID)
+	if err == nil {
+		return status, nil
+	}
+	if !errors.Is(err, download.ErrDownloadNotFound) {
+		return download.DownloadStatus{}, err
+	}
+
+	fallbackIDs := make([]string, 0, 2)
+	if job.GrabID > 0 {
+		fallbackIDs = append(fallbackIDs, fmt.Sprintf("tag:bookwyrm:grab:%d", job.GrabID))
+	}
+	if strings.TrimSpace(job.WorkID) != "" {
+		fallbackIDs = append(fallbackIDs, fmt.Sprintf("tag:bookwyrm:work:%s", strings.TrimSpace(job.WorkID)))
+	}
+
+	for _, fallbackID := range fallbackIDs {
+		resolved, _, fallbackErr := m.downloadSvc.GetStatus(ctx, job.ClientName, fallbackID)
+		if fallbackErr == nil {
+			return resolved, nil
+		}
+		if !errors.Is(fallbackErr, download.ErrDownloadNotFound) {
+			return download.DownloadStatus{}, fallbackErr
+		}
+	}
+
+	return download.DownloadStatus{}, download.ErrDownloadNotFound
 }
 
 func (m *Manager) reliabilityWorker(ctx context.Context) {
@@ -237,6 +317,19 @@ func (m *Manager) reliabilityWorker(ctx context.Context) {
 			return
 		case <-ticker.C:
 			_ = m.store.RecomputeClientReliability()
+		}
+	}
+}
+
+func (m *Manager) recoveryWorker(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = m.store.RecoverExpiredLeases(time.Now().UTC(), 100)
 		}
 	}
 }
@@ -260,6 +353,20 @@ func (m *Manager) pickClient(protocol string) string {
 		}
 	}
 	return ""
+}
+
+func (m *Manager) withCorrelation(job Job, payload map[string]any) map[string]any {
+	out := map[string]any{
+		"download_job_id": job.ID,
+		"grab_id":         job.GrabID,
+		"candidate_id":    job.CandidateID,
+		"work_id":         job.WorkID,
+		"edition_id":      job.EditionID,
+	}
+	for k, v := range payload {
+		out[k] = v
+	}
+	return out
 }
 
 func normalizeState(state string) JobStatus {

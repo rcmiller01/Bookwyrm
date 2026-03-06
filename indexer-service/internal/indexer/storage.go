@@ -18,6 +18,7 @@ type Storage interface {
 	CreateOrGetSearchRequest(requestKey string, query QuerySpec, maxAttempts int) SearchRequestRecord
 	GetSearchRequest(id int64) (SearchRequestRecord, error)
 	TryLockNextSearchRequest(workerID string, now time.Time) (SearchRequestRecord, bool, error)
+	RecoverExpiredSearchRequests(now time.Time, limit int) (int, error)
 	RescheduleSearchRequest(id int64, lastErr string, notBefore time.Time, terminal bool) error
 	MarkSearchRequestSucceeded(id int64) error
 
@@ -26,6 +27,17 @@ type Storage interface {
 	GetCandidateByID(id int64) (CandidateRecord, error)
 	CreateGrab(candidateID int64, entityType string, entityID string) (GrabRecord, error)
 	GetGrabByID(id int64) (GrabRecord, error)
+	SetWantedWork(rec WantedWorkRecord) (WantedWorkRecord, error)
+	ListWantedWorks() []WantedWorkRecord
+	DeleteWantedWork(workID string) error
+	ListDueWantedWorks(now time.Time) []WantedWorkRecord
+	MarkWantedWorkEnqueued(workID string, now time.Time) error
+	SetWantedAuthor(rec WantedAuthorRecord) (WantedAuthorRecord, error)
+	ListWantedAuthors() []WantedAuthorRecord
+	DeleteWantedAuthor(authorID string) error
+	ListDueWantedAuthors(now time.Time) []WantedAuthorRecord
+	MarkWantedAuthorEnqueued(authorID string, now time.Time) error
+	PruneStaleCandidates(maxPerRequest int) (int, error)
 
 	RecordBackendSearchResult(backendID string, success bool, latency time.Duration, yielded bool) error
 	RecomputeReliability() error

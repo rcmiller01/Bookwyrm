@@ -14,6 +14,7 @@ type Orchestrator struct {
 	store          Storage
 	backends       map[string]SearchBackend
 	quarantineMode string
+	candidateLimit int
 	once           sync.Once
 }
 
@@ -25,7 +26,15 @@ func NewOrchestrator(store Storage, quarantineMode string) *Orchestrator {
 		store:          store,
 		backends:       map[string]SearchBackend{},
 		quarantineMode: quarantineMode,
+		candidateLimit: 50,
 	}
+}
+
+func (o *Orchestrator) SetCandidateRetention(limit int) {
+	if limit <= 0 {
+		return
+	}
+	o.candidateLimit = limit
 }
 
 func (o *Orchestrator) RegisterBackend(backend SearchBackend, rec BackendRecord) {
@@ -44,6 +53,9 @@ func (o *Orchestrator) Start(ctx context.Context, workerCount int) {
 		for i := 0; i < workerCount; i++ {
 			go o.worker(ctx)
 		}
+		go o.recoveryWorker(ctx)
+		go o.wantedSchedulerWorker(ctx)
+		go o.candidateCleanupWorker(ctx)
 	})
 }
 
@@ -124,6 +136,68 @@ func (o *Orchestrator) worker(ctx context.Context) {
 				_ = o.store.RescheduleSearchRequest(rec.ID, err.Error(), time.Now().UTC().Add(backoffForAttempt(rec.AttemptCount)), terminal)
 			}
 		}
+	}
+}
+
+func (o *Orchestrator) recoveryWorker(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = o.store.RecoverExpiredSearchRequests(time.Now().UTC(), 100)
+		}
+	}
+}
+
+func (o *Orchestrator) wantedSchedulerWorker(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			o.enqueueDueWanted(time.Now().UTC())
+		}
+	}
+}
+
+func (o *Orchestrator) candidateCleanupWorker(ctx context.Context) {
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = o.store.PruneStaleCandidates(o.candidateLimit)
+		}
+	}
+}
+
+func (o *Orchestrator) enqueueDueWanted(now time.Time) {
+	for _, rec := range o.store.ListDueWantedWorks(now) {
+		query := QuerySpec{
+			EntityType: "work",
+			EntityID:   rec.WorkID,
+		}
+		query.Preferences.Formats = append([]string(nil), rec.Formats...)
+		query.Preferences.Languages = append([]string(nil), rec.Languages...)
+		o.Enqueue(query)
+		_ = o.store.MarkWantedWorkEnqueued(rec.WorkID, now)
+	}
+	for _, rec := range o.store.ListDueWantedAuthors(now) {
+		query := QuerySpec{
+			EntityType: "author",
+			EntityID:   rec.AuthorID,
+		}
+		query.Preferences.Formats = append([]string(nil), rec.Formats...)
+		query.Preferences.Languages = append([]string(nil), rec.Languages...)
+		o.Enqueue(query)
+		_ = o.store.MarkWantedAuthorEnqueued(rec.AuthorID, now)
 	}
 }
 

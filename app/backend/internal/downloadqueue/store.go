@@ -163,9 +163,59 @@ func (s *Store) ClaimNextQueued(workerID string, now time.Time) (Job, bool, erro
 	job.AttemptCount++
 	job.LockedAt = &lockTime
 	job.LockedBy = workerID
+	leaseExpiresAt := lockTime.Add(DownloadJobLeaseTTL)
+	job.LeaseExpiresAt = &leaseExpiresAt
 	job.UpdatedAt = lockTime
 	s.jobs[job.ID] = job
 	return job, true, nil
+}
+
+func (s *Store) RecoverExpiredLeases(now time.Time, limit int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 {
+		limit = 100
+	}
+	recovered := 0
+	for id := range s.jobs {
+		if recovered >= limit {
+			break
+		}
+		job := s.jobs[id]
+		if job.Status != JobStatusSubmitted || job.LeaseExpiresAt == nil || job.LeaseExpiresAt.After(now) {
+			continue
+		}
+		nextAttempt := job.AttemptCount + 1
+		job.AttemptCount = nextAttempt
+		job.LastError = "lease expired; recovered"
+		job.LockedAt = nil
+		job.LockedBy = ""
+		job.LeaseExpiresAt = nil
+		job.UpdatedAt = now.UTC()
+		if nextAttempt >= job.MaxAttempts {
+			job.Status = JobStatusFailed
+			job.NotBefore = now.UTC()
+		} else {
+			job.Status = JobStatusQueued
+			job.NotBefore = now.UTC().Add(recoveryBackoffForAttempt(nextAttempt))
+		}
+		s.jobs[id] = job
+		event := Event{
+			ID:        s.nextEventID,
+			JobID:     job.ID,
+			EventType: "lease_recovered",
+			Message:   "submitted lease expired; job recovered",
+			Data: map[string]any{
+				"next_status":   string(job.Status),
+				"attempt_count": job.AttemptCount,
+			},
+			CreatedAt: now.UTC(),
+		}
+		s.nextEventID++
+		s.events[job.ID] = append(s.events[job.ID], event)
+		recovered++
+	}
+	return recovered, nil
 }
 
 func (s *Store) ListActiveJobs(limit int) []Job {
@@ -219,6 +269,7 @@ func (s *Store) MarkSubmitted(id int64, downloadID string) error {
 	job.Status = JobStatusDownloading
 	job.LockedAt = nil
 	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = now
 	s.jobs[id] = job
 	return nil
@@ -236,6 +287,7 @@ func (s *Store) UpdateProgress(id int64, status JobStatus, outputPath string, la
 	if outputPath != "" {
 		job.OutputPath = outputPath
 	}
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return nil
@@ -270,6 +322,7 @@ func (s *Store) Reschedule(id int64, errMsg string, notBefore time.Time, termina
 	job.NotBefore = notBefore.UTC()
 	job.LockedAt = nil
 	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return nil
@@ -291,9 +344,28 @@ func (s *Store) RetryJob(id int64) error {
 	job.NotBefore = time.Now().UTC()
 	job.LockedAt = nil
 	job.LockedBy = ""
+	job.LeaseExpiresAt = nil
 	job.UpdatedAt = time.Now().UTC()
 	s.jobs[id] = job
 	return nil
+}
+
+func recoveryBackoffForAttempt(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	delay := time.Duration(1<<minInt(attempt, 7)) * time.Second
+	if delay > 5*time.Minute {
+		return 5 * time.Minute
+	}
+	return delay
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *Store) AddEvent(event Event) (Event, error) {
@@ -307,6 +379,18 @@ func (s *Store) AddEvent(event Event) (Event, error) {
 	event.CreatedAt = time.Now().UTC()
 	s.events[event.JobID] = append(s.events[event.JobID], event)
 	return event, nil
+}
+
+func (s *Store) ListEvents(jobID int64) []Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	events := s.events[jobID]
+	if len(events) == 0 {
+		return []Event{}
+	}
+	out := make([]Event, len(events))
+	copy(out, events)
+	return out
 }
 
 func (s *Store) RecordClientResult(clientID string, success bool, latency time.Duration, terminalComplete bool) error {

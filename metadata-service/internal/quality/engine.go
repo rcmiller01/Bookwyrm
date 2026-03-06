@@ -3,6 +3,7 @@ package quality
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -42,6 +43,19 @@ func (e *qualityEngine) Audit(ctx context.Context, limit int) (*AuditReport, err
 	}
 	invalidIdentifiers := make([]InvalidIdentifier, 0)
 	for _, candidate := range identifierCandidates {
+		normalizedType := strings.ToUpper(strings.TrimSpace(candidate.Type))
+		if normalizedType == "ISBN_10" || normalizedType == "ISBN10" {
+			invalidIdentifiers = append(invalidIdentifiers, InvalidIdentifier{
+				EditionID: candidate.EditionID,
+				Type:      candidate.Type,
+				Value:     candidate.Value,
+				Reason:    "non-canonical ISBN-10; prefer ISBN-13",
+			})
+			if len(invalidIdentifiers) >= limit {
+				break
+			}
+			continue
+		}
 		valid, reason := VerifyIdentifier(candidate.Type, candidate.Value)
 		if valid {
 			continue

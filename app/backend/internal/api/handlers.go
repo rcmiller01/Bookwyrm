@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"app-backend/internal/domain"
 	"app-backend/internal/domain/contract"
 	"app-backend/internal/domain/factory"
-	"app-backend/internal/domain"
 	"app-backend/internal/downloadqueue"
 	"app-backend/internal/importer"
 	"app-backend/internal/integration/indexer"
@@ -30,6 +30,7 @@ type Handlers struct {
 	jobService     *jobs.Service
 	downloadMgr    *downloadqueue.Manager
 	importStore    importer.Store
+	importEngine   *importer.Engine
 	importConfig   ImportConfig
 	domainPack     contract.Domain
 	importer       *pipeline.ImporterPipeline
@@ -83,6 +84,10 @@ func (h *Handlers) SetDownloadManager(downloadMgr *downloadqueue.Manager) {
 
 func (h *Handlers) SetImportStore(importStore importer.Store) {
 	h.importStore = importStore
+}
+
+func (h *Handlers) SetImportEngine(engine *importer.Engine) {
+	h.importEngine = engine
 }
 
 func (h *Handlers) SetImportConfig(cfg ImportConfig) {
@@ -192,6 +197,79 @@ func (h *Handlers) GetAvailability(w http.ResponseWriter, r *http.Request) {
 		"work":             work,
 		"availability":     result,
 		"requested_groups": groups,
+	})
+}
+
+func (h *Handlers) GetWorkTimeline(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	workID := strings.TrimSpace(mux.Vars(r)["id"])
+	if workID == "" {
+		writeError(w, "missing work id", http.StatusBadRequest)
+		return
+	}
+
+	allImports := h.importStore.ListJobs(importer.JobFilter{Limit: 500})
+	imports := make([]map[string]any, 0)
+	downloadIDs := make(map[int64]struct{})
+	for _, job := range allImports {
+		if strings.TrimSpace(job.WorkID) != workID {
+			continue
+		}
+		events := h.importStore.ListEvents(job.ID)
+		imports = append(imports, map[string]any{
+			"job":    job,
+			"events": events,
+		})
+		downloadIDs[job.DownloadJobID] = struct{}{}
+	}
+
+	downloads := make([]map[string]any, 0, len(downloadIDs))
+	searches := make([]map[string]any, 0, len(downloadIDs))
+	grabs := make([]map[string]any, 0, len(downloadIDs))
+	for downloadID := range downloadIDs {
+		job, err := h.downloadMgr.GetJob(downloadID)
+		if err != nil {
+			continue
+		}
+		downloads = append(downloads, map[string]any{
+			"job":    job,
+			"events": h.downloadMgr.ListEvents(downloadID),
+		})
+		searches = append(searches, map[string]any{
+			"search_request_id": nil,
+			"candidate_id":      job.CandidateID,
+			"grab_id":           job.GrabID,
+			"download_job_id":   job.ID,
+			"status":            job.Status,
+			"created_at":        job.CreatedAt,
+			"updated_at":        job.UpdatedAt,
+		})
+		grabs = append(grabs, map[string]any{
+			"grab_id":         job.GrabID,
+			"candidate_id":    job.CandidateID,
+			"download_job_id": job.ID,
+			"protocol":        job.Protocol,
+			"status":          job.Status,
+		})
+	}
+
+	libraryItems := h.importStore.ListLibraryItems(workID, 200)
+	writeJSON(w, map[string]any{
+		"work_id": workID,
+		"timeline": map[string]any{
+			"searches":      searches,
+			"grabs":         grabs,
+			"downloads":     downloads,
+			"imports":       imports,
+			"library_items": libraryItems,
+		},
 	})
 }
 
@@ -618,6 +696,47 @@ func (h *Handlers) SkipImportJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, "failed to skip import job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) DecideImportJob(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	if h.importEngine == nil {
+		writeError(w, "import decision engine not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid import job id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	action := importer.DecisionAction(strings.TrimSpace(body.Action))
+	if !importer.IsValidDecisionAction(action) {
+		writeError(w, "invalid action", http.StatusBadRequest)
+		return
+	}
+	if err := h.importEngine.Decide(id, action); err != nil {
+		if err == importer.ErrNotFound {
+			writeError(w, "import job not found", http.StatusNotFound)
+			return
+		}
+		if err == importer.ErrInvalidDecisionAction {
+			writeError(w, "invalid action", http.StatusBadRequest)
+			return
+		}
+		writeError(w, err.Error(), http.StatusConflict)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
