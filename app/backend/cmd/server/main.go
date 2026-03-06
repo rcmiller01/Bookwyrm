@@ -50,6 +50,7 @@ func main() {
 	keepIncoming := strings.EqualFold(keepIncomingRaw, "true")
 	keepIncomingDays := atoiOrDefault(envOrDefault("LIBRARY_KEEP_INCOMING_DAYS", "14"), 14)
 	keepTrashDays := atoiOrDefault(envOrDefault("LIBRARY_KEEP_TRASH_DAYS", "30"), 30)
+	uiAssetsDir := envOrDefault("UI_DIST_DIR", "./web/dist")
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 	domainName := envOrDefault("APP_DOMAIN", "books")
@@ -138,8 +139,13 @@ func main() {
 	h.SetImportConfig(api.ImportConfig{
 		KeepIncoming: keepIncoming,
 		Source:       keepIncomingSource,
+		LibraryRoot:  libraryRoot,
 	})
-	router := api.NewRouter(h)
+	router := api.NewRouterWithConfig(h, api.RouterConfig{
+		UIAssetsDir:          uiAssetsDir,
+		MetadataProxyBaseURL: metadataURL,
+		IndexerProxyBaseURL:  indexerURL,
+	})
 
 	log.Printf("app backend listening on %s, metadata-service=%s, domain=%s", listenAddr, metadataURL, domainPack.Name())
 	if err := http.ListenAndServe(listenAddr, router); err != nil {

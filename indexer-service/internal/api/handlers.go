@@ -329,6 +329,22 @@ func (h *Handlers) SetBackendPriority(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handlers) SetBackendPreferred(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	var body struct {
+		Preferred bool `json:"preferred"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.SetBackendPreferred(id, body.Preferred); err != nil {
+		writeError(w, "backend not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handlers) ListBackendReliability(w http.ResponseWriter, _ *http.Request) {
 	backends := h.store.ListBackends()
 	writeJSON(w, map[string]any{"backends": backends})

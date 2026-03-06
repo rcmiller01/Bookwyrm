@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -61,5 +62,41 @@ func TestDownloadJobsImportedFilter(t *testing.T) {
 	items, _ := payload["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one unimported completed job, got %d", len(items))
+	}
+}
+
+func TestUpdateDownloadClient(t *testing.T) {
+	h := NewHandlers(nil, nil, store.NewInMemoryWatchlistStore())
+	dStore := downloadqueue.NewStore()
+	mgr := downloadqueue.NewManager(dStore, download.NewService(), nil, "last_resort")
+	h.SetDownloadManager(mgr)
+	router := NewRouter(h)
+
+	dStore.UpsertClient(downloadqueue.DownloadClientRecord{
+		ID:         "nzbget",
+		Name:       "nzbget",
+		ClientType: "nzbget",
+		Enabled:    true,
+		Priority:   100,
+	})
+
+	body := bytes.NewBufferString(`{"enabled":false,"priority":20}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/download/clients/nzbget", body)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+	var rec downloadqueue.DownloadClientRecord
+	if err := json.NewDecoder(res.Body).Decode(&rec); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if rec.Enabled {
+		t.Fatalf("expected enabled=false after update")
+	}
+	if rec.Priority != 20 {
+		t.Fatalf("expected priority=20 after update, got %d", rec.Priority)
 	}
 }

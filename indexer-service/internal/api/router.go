@@ -28,6 +28,7 @@ func NewRouter(h *Handlers) http.Handler {
 	v1.HandleFunc("/backends/{id}/enable", h.EnableBackend).Methods(http.MethodPost)
 	v1.HandleFunc("/backends/{id}/disable", h.DisableBackend).Methods(http.MethodPost)
 	v1.HandleFunc("/backends/{id}/priority", h.SetBackendPriority).Methods(http.MethodPost)
+	v1.HandleFunc("/backends/{id}/preferred", h.SetBackendPreferred).Methods(http.MethodPost)
 	v1.HandleFunc("/backends/reliability", h.ListBackendReliability).Methods(http.MethodGet)
 
 	mcp := r.PathPrefix("/v1/mcp").Subrouter()

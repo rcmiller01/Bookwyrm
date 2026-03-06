@@ -136,6 +136,30 @@ func (m *Manager) ListJobs(filter JobFilter) []Job {
 	return m.store.ListJobs(filter)
 }
 
+func (m *Manager) ListClients() []DownloadClientRecord {
+	return m.store.ListClients()
+}
+
+func (m *Manager) UpdateClient(id string, enabled *bool, priority *int) (DownloadClientRecord, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return DownloadClientRecord{}, ErrNotFound
+	}
+	for _, rec := range m.store.ListClients() {
+		if rec.ID != id {
+			continue
+		}
+		if enabled != nil {
+			rec.Enabled = *enabled
+		}
+		if priority != nil {
+			rec.Priority = *priority
+		}
+		return m.store.UpsertClient(rec), nil
+	}
+	return DownloadClientRecord{}, ErrNotFound
+}
+
 func (m *Manager) GetJob(id int64) (Job, error) {
 	return m.store.GetJob(id)
 }

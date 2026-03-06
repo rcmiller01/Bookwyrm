@@ -7,6 +7,7 @@ type Storage interface {
 	ListBackends() []BackendRecord
 	SetBackendEnabled(id string, enabled bool) error
 	SetBackendPriority(id string, priority int) error
+	SetBackendPreferred(id string, preferred bool) error
 	SetBackendReliability(id string, score float64, tier DispatchTier) error
 
 	UpsertMCPServer(rec MCPServerRecord) MCPServerRecord

@@ -120,6 +120,22 @@ func (s *Store) SetBackendPriority(id string, priority int) error {
 	return nil
 }
 
+func (s *Store) SetBackendPreferred(id string, preferred bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, ok := s.backends[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if b.Config == nil {
+		b.Config = map[string]any{}
+	}
+	b.Config["preferred"] = preferred
+	b.UpdatedAt = time.Now().UTC()
+	s.backends[id] = b
+	return nil
+}
+
 func (s *Store) SetBackendReliability(id string, score float64, tier DispatchTier) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

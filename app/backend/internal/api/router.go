@@ -2,12 +2,27 @@ package api
 
 import (
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+type RouterConfig struct {
+	UIAssetsDir          string
+	MetadataProxyBaseURL string
+	IndexerProxyBaseURL  string
+}
+
 func NewRouter(h *Handlers) http.Handler {
+	return NewRouterWithConfig(h, RouterConfig{})
+}
+
+func NewRouterWithConfig(h *Handlers, cfg RouterConfig) http.Handler {
 	r := mux.NewRouter()
 	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -28,6 +43,8 @@ func NewRouter(h *Handlers) http.Handler {
 	api.HandleFunc("/jobs/{id}/retry", h.RetryJob).Methods(http.MethodPost)
 	api.HandleFunc("/jobs/{id}/cancel", h.CancelJob).Methods(http.MethodPost)
 	api.HandleFunc("/download/jobs", h.ListDownloadJobs).Methods(http.MethodGet)
+	api.HandleFunc("/download/clients", h.ListDownloadClients).Methods(http.MethodGet)
+	api.HandleFunc("/download/clients/{id}", h.UpdateDownloadClient).Methods(http.MethodPatch)
 	api.HandleFunc("/download/jobs/{id}", h.GetDownloadJob).Methods(http.MethodGet)
 	api.HandleFunc("/download/from-grab/{grabID}", h.CreateDownloadFromGrab).Methods(http.MethodPost)
 	api.HandleFunc("/download/jobs/{id}/cancel", h.CancelDownloadJob).Methods(http.MethodPost)
@@ -40,5 +57,89 @@ func NewRouter(h *Handlers) http.Handler {
 	api.HandleFunc("/import/jobs/{id}/skip", h.SkipImportJob).Methods(http.MethodPost)
 	api.HandleFunc("/import/stats", h.GetImportStats).Methods(http.MethodGet)
 	api.HandleFunc("/library/items", h.ListLibraryItems).Methods(http.MethodGet)
+
+	if metadataProxy := newPathProxy(cfg.MetadataProxyBaseURL, "/ui-api/metadata", "/v1"); metadataProxy != nil {
+		r.Handle("/ui-api/metadata", metadataProxy)
+		r.PathPrefix("/ui-api/metadata/").Handler(metadataProxy)
+	}
+	if indexerProxy := newPathProxy(cfg.IndexerProxyBaseURL, "/ui-api/indexer", "/v1/indexer"); indexerProxy != nil {
+		r.Handle("/ui-api/indexer", indexerProxy)
+		r.PathPrefix("/ui-api/indexer/").Handler(indexerProxy)
+	}
+
+	if strings.TrimSpace(cfg.UIAssetsDir) != "" {
+		fs := http.FileServer(http.Dir(cfg.UIAssetsDir))
+		r.PathPrefix("/assets/").Handler(fs)
+		r.PathPrefix("/").Handler(spaFallbackHandler(cfg.UIAssetsDir))
+	}
+
 	return r
+}
+
+func newPathProxy(baseURL string, stripPrefix string, upstreamPrefix string) http.Handler {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return nil
+	}
+	target, err := url.Parse(baseURL)
+	if err != nil {
+		return nil
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		path := strings.TrimPrefix(req.URL.Path, stripPrefix)
+		if path == "" {
+			path = "/"
+		}
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		req.URL.Path = joinURLPath(upstreamPrefix, path)
+	}
+	return proxy
+}
+
+func spaFallbackHandler(assetsDir string) http.Handler {
+	indexPath := filepath.Join(assetsDir, "index.html")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.NotFound(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/ui-api/") || r.URL.Path == "/metrics" {
+			http.NotFound(w, r)
+			return
+		}
+		if _, err := os.Stat(indexPath); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, indexPath)
+	})
+}
+
+func joinURLPath(base string, suffix string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "/"
+	}
+	suffix = strings.TrimSpace(suffix)
+	if suffix == "" {
+		suffix = "/"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if !strings.HasPrefix(suffix, "/") {
+		suffix = "/" + suffix
+	}
+	if base == "/" {
+		return suffix
+	}
+	if suffix == "/" {
+		return base
+	}
+	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(suffix, "/")
 }

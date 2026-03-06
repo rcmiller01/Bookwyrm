@@ -168,3 +168,31 @@ func TestOrchestratorEnqueueDueWantedCreatesRequestsAndMarksEnqueued(t *testing.
 		t.Fatalf("expected no immediately due wanted authors after enqueue, got %d", len(due))
 	}
 }
+
+func TestOrchestratorPreferredBackendsRunFirst(t *testing.T) {
+	store := NewStore()
+	orch := NewOrchestrator(store, "last_resort")
+
+	callOrder := []string{}
+	mu := &sync.Mutex{}
+
+	orch.RegisterBackend(
+		&recordingBackend{id: "non-preferred", name: "non-preferred", pipeline: "prowlarr", order: &callOrder, mu: mu},
+		BackendRecord{ID: "non-preferred", Name: "non-preferred", BackendType: BackendTypeProwlarr, Enabled: true, Tier: TierPrimary, ReliabilityScore: 0.99, Priority: 1, Config: map[string]any{"preferred": false}},
+	)
+	orch.RegisterBackend(
+		&recordingBackend{id: "preferred", name: "preferred", pipeline: "prowlarr", order: &callOrder, mu: mu},
+		BackendRecord{ID: "preferred", Name: "preferred", BackendType: BackendTypeProwlarr, Enabled: true, Tier: TierSecondary, ReliabilityScore: 0.10, Priority: 500, Config: map[string]any{"preferred": true}},
+	)
+
+	req := orch.Enqueue(QuerySpec{EntityType: "work", EntityID: "work-pref", Title: "Dune"})
+	if err := orch.ProcessRequest(context.Background(), req.ID); err != nil {
+		t.Fatalf("process request failed: %v", err)
+	}
+	if len(callOrder) < 2 {
+		t.Fatalf("expected at least two backend calls, got %v", callOrder)
+	}
+	if callOrder[0] != "preferred" {
+		t.Fatalf("expected preferred backend first, got %v", callOrder)
+	}
+}

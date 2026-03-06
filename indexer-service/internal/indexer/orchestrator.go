@@ -217,6 +217,11 @@ func (o *Orchestrator) orderedBackends() []SearchBackend {
 		active = append(active, rec)
 	}
 	sort.SliceStable(active, func(i, j int) bool {
+		pi := isBackendPreferred(active[i])
+		pj := isBackendPreferred(active[j])
+		if pi != pj {
+			return pi
+		}
 		ti := tierRank(active[i].Tier)
 		tj := tierRank(active[j].Tier)
 		if ti != tj {
@@ -232,6 +237,18 @@ func (o *Orchestrator) orderedBackends() []SearchBackend {
 		out = append(out, o.backends[rec.ID])
 	}
 	return out
+}
+
+func isBackendPreferred(rec BackendRecord) bool {
+	if rec.Config == nil {
+		return false
+	}
+	v, ok := rec.Config["preferred"]
+	if !ok {
+		return false
+	}
+	b, ok := v.(bool)
+	return ok && b
 }
 
 func tierRank(t DispatchTier) int {

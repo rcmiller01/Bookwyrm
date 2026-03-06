@@ -90,6 +90,21 @@ func (s *PGStore) SetBackendPriority(id string, priority int) error {
 	return nil
 }
 
+func (s *PGStore) SetBackendPreferred(id string, preferred bool) error {
+	tag, err := s.db.Exec(context.Background(), `
+		UPDATE indexer_backends
+		SET config_json = jsonb_set(COALESCE(config_json, '{}'::jsonb), '{preferred}', to_jsonb($1::boolean), true),
+		    updated_at = NOW()
+		WHERE id=$2`, preferred, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *PGStore) SetBackendReliability(id string, score float64, tier DispatchTier) error {
 	tag, err := s.db.Exec(context.Background(), `UPDATE indexer_backends SET reliability_score=$1, tier=$2, updated_at=NOW() WHERE id=$3`, score, string(tier), id)
 	if err != nil {

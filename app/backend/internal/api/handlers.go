@@ -40,6 +40,7 @@ type Handlers struct {
 type ImportConfig struct {
 	KeepIncoming bool
 	Source       string
+	LibraryRoot  string
 }
 
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
@@ -493,6 +494,52 @@ func (h *Handlers) ListDownloadJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"items": items})
 }
 
+func (h *Handlers) ListDownloadClients(w http.ResponseWriter, _ *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, map[string]any{"items": h.downloadMgr.ListClients()})
+}
+
+func (h *Handlers) UpdateDownloadClient(w http.ResponseWriter, r *http.Request) {
+	if h.downloadMgr == nil {
+		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id := strings.TrimSpace(mux.Vars(r)["id"])
+	if id == "" {
+		writeError(w, "invalid client id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Enabled  *bool `json:"enabled"`
+		Priority *int  `json:"priority"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.Enabled == nil && body.Priority == nil {
+		writeError(w, "at least one field is required", http.StatusBadRequest)
+		return
+	}
+	if body.Priority != nil && *body.Priority < 1 {
+		writeError(w, "priority must be >= 1", http.StatusBadRequest)
+		return
+	}
+	rec, err := h.downloadMgr.UpdateClient(id, body.Enabled, body.Priority)
+	if err != nil {
+		if err == downloadqueue.ErrNotFound {
+			writeError(w, "download client not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to update download client", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, rec)
+}
+
 func (h *Handlers) GetDownloadJob(w http.ResponseWriter, r *http.Request) {
 	if h.downloadMgr == nil {
 		writeError(w, "download manager not configured", http.StatusServiceUnavailable)
@@ -774,9 +821,11 @@ func (h *Handlers) GetImportStats(w http.ResponseWriter, _ *http.Request) {
 			"failed":       counts[importer.JobStatusFailed],
 			"skipped":      counts[importer.JobStatusSkipped],
 		},
-		"next_runnable_at":     nextRunnable,
-		"keep_incoming":        h.importConfig.KeepIncoming,
-		"keep_incoming_source": fallbackString(h.importConfig.Source, "default"),
+		"next_runnable_at":        nextRunnable,
+		"keep_incoming":           h.importConfig.KeepIncoming,
+		"keep_incoming_source":    fallbackString(h.importConfig.Source, "default"),
+		"library_root":            strings.TrimSpace(h.importConfig.LibraryRoot),
+		"library_root_configured": strings.TrimSpace(h.importConfig.LibraryRoot) != "",
 	})
 }
 
