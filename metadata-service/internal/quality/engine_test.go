@@ -76,11 +76,11 @@ func TestEngineAuditAndRepair(t *testing.T) {
 		duplicates: []DuplicateEdition{{WorkID: "w1"}},
 		candidates: []IdentifierCandidate{
 			{EditionID: "e1", Type: "ISBN_13", Value: "9780306406158"},
-			{EditionID: "e2", Type: "ISBN_10", Value: "0306406153"},
+			{EditionID: "e2", Type: "ISBN_10", Value: "0306406152"},
 		},
 		repairSeries: map[string]int{"s1": 2, "s2": 0},
 		syncWork:     map[string]bool{"w1": true, "w2": false},
-		removedIDs:   map[string]bool{"e2|ISBN_10|0306406153": true},
+		removedIDs:   map[string]bool{"e1|ISBN_13|9780306406158": true},
 	}
 
 	engine := NewEngine(repo)

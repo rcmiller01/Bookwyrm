@@ -5,6 +5,8 @@ import "time"
 type MetadataSnapshot struct {
 	WorkID          string   `json:"work_id"`
 	EditionID       string   `json:"edition_id,omitempty"`
+	EntityType      string   `json:"entity_type,omitempty"`
+	EntityID        string   `json:"entity_id,omitempty"`
 	ISBN10          string   `json:"isbn_10,omitempty"`
 	ISBN13          string   `json:"isbn_13,omitempty"`
 	Title           string   `json:"title"`

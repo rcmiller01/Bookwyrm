@@ -9,12 +9,15 @@ import (
 	"strings"
 	"time"
 
+	"app-backend/internal/domain/contract"
+	"app-backend/internal/domain/factory"
 	"app-backend/internal/domain"
 	"app-backend/internal/downloadqueue"
 	"app-backend/internal/importer"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
 	"app-backend/internal/jobs"
+	"app-backend/internal/pipeline"
 	"app-backend/internal/store"
 
 	"github.com/gorilla/mux"
@@ -28,6 +31,9 @@ type Handlers struct {
 	downloadMgr    *downloadqueue.Manager
 	importStore    importer.Store
 	importConfig   ImportConfig
+	domainPack     contract.Domain
+	importer       *pipeline.ImporterPipeline
+	renamer        *pipeline.RenamerPipeline
 }
 
 type ImportConfig struct {
@@ -36,7 +42,35 @@ type ImportConfig struct {
 }
 
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
-	return &Handlers{metaClient: metaClient, indexerClient: indexerClient, watchlistStore: watchlistStore}
+	domainPack, err := factory.Resolve("books")
+	if err != nil {
+		panic(err)
+	}
+	return NewHandlersWithDomain(metaClient, indexerClient, watchlistStore, domainPack)
+}
+
+func NewHandlersWithDomain(
+	metaClient *metadata.Client,
+	indexerClient *indexer.Client,
+	watchlistStore store.WatchlistStore,
+	domainPack contract.Domain,
+) *Handlers {
+	if domainPack == nil {
+		resolved, err := factory.Resolve("books")
+		if err != nil {
+			panic(err)
+		}
+		domainPack = resolved
+	}
+
+	return &Handlers{
+		metaClient:     metaClient,
+		indexerClient:  indexerClient,
+		watchlistStore: watchlistStore,
+		domainPack:     domainPack,
+		importer:       pipeline.NewImporterPipeline(domainPack),
+		renamer:        pipeline.NewRenamerPipeline(domainPack),
+	}
 }
 
 func (h *Handlers) SetJobService(jobService *jobs.Service) {
@@ -134,21 +168,20 @@ func (h *Handlers) GetAvailability(w http.ResponseWriter, r *http.Request) {
 		groups = []string{"prowlarr", "non_prowlarr"}
 	}
 
+	querySpec := h.importer.BuildSearchSpec(
+		snapshot,
+		splitCSV(r.URL.Query().Get("capabilities")),
+		strings.TrimSpace(r.URL.Query().Get("priority")),
+		strings.TrimSpace(r.URL.Query().Get("policy_profile")),
+		groups,
+	)
+
 	result, err := h.indexerClient.Search(r.Context(), indexer.SearchRequest{
-		Metadata: map[string]any{
-			"work_id":          snapshot.WorkID,
-			"edition_id":       snapshot.EditionID,
-			"isbn_10":          snapshot.ISBN10,
-			"isbn_13":          snapshot.ISBN13,
-			"title":            snapshot.Title,
-			"authors":          snapshot.Authors,
-			"language":         snapshot.Language,
-			"publication_year": snapshot.PublicationYear,
-		},
-		RequestedCapabilities: splitCSV(r.URL.Query().Get("capabilities")),
-		Priority:              strings.TrimSpace(r.URL.Query().Get("priority")),
-		PolicyProfile:         strings.TrimSpace(r.URL.Query().Get("policy_profile")),
-		BackendGroups:         groups,
+		Metadata:              querySpec.Metadata,
+		RequestedCapabilities: querySpec.RequestedCapabilities,
+		Priority:              querySpec.Priority,
+		PolicyProfile:         querySpec.PolicyProfile,
+		BackendGroups:         querySpec.BackendGroups,
 	})
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadGateway)

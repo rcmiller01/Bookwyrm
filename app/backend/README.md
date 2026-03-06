@@ -22,6 +22,7 @@ Application BFF layer that composes metadata-service APIs into app workflows.
 ## Environment Variables
 
 - `APP_BACKEND_ADDR` (default `:8090`)
+- `APP_DOMAIN` (default `books`)
 - `METADATA_SERVICE_URL` (default `http://localhost:8080`)
 - `METADATA_SERVICE_API_KEY` (optional)
 - `INDEXER_SERVICE_URL` (default `http://localhost:8091`)

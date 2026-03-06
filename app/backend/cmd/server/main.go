@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"app-backend/internal/api"
+	"app-backend/internal/domain/factory"
 	"app-backend/internal/downloadqueue"
 	"app-backend/internal/importer"
 	"app-backend/internal/integration/download"
@@ -49,6 +50,7 @@ func main() {
 	keepIncoming := strings.EqualFold(keepIncomingRaw, "true")
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
+	domainName := envOrDefault("APP_DOMAIN", "books")
 
 	metaClient := metadata.NewClient(metadata.Config{
 		BaseURL: metadataURL,
@@ -60,6 +62,11 @@ func main() {
 		APIKey:  indexerAPIKey,
 		Timeout: 10 * time.Second,
 	})
+
+	domainPack, err := factory.Resolve(domainName)
+	if err != nil {
+		log.Fatalf("failed to resolve app domain %q: %v", domainName, err)
+	}
 
 	downloadService := download.NewService()
 	if qbitURL != "" {
@@ -119,7 +126,7 @@ func main() {
 	)
 	go jobService.Start(context.Background())
 
-	h := api.NewHandlers(metaClient, indexerClient, store.NewInMemoryWatchlistStore())
+	h := api.NewHandlersWithDomain(metaClient, indexerClient, store.NewInMemoryWatchlistStore(), domainPack)
 	h.SetJobService(jobService)
 	h.SetDownloadManager(downloadManager)
 	h.SetImportStore(importStore)
@@ -129,7 +136,7 @@ func main() {
 	})
 	router := api.NewRouter(h)
 
-	log.Printf("app backend listening on %s, metadata-service=%s", listenAddr, metadataURL)
+	log.Printf("app backend listening on %s, metadata-service=%s, domain=%s", listenAddr, metadataURL, domainPack.Name())
 	if err := http.ListenAndServe(listenAddr, router); err != nil {
 		log.Fatal(err)
 	}

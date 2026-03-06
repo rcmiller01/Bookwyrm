@@ -45,8 +45,8 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.Metadata.WorkID == "" {
-		writeError(w, "metadata.work_id is required", http.StatusBadRequest)
+	if strings.TrimSpace(req.Metadata.WorkID) == "" && strings.TrimSpace(req.Metadata.EntityID) == "" {
+		writeError(w, "metadata.work_id or metadata.entity_id is required", http.StatusBadRequest)
 		return
 	}
 	result, err := h.service.Search(r.Context(), req)

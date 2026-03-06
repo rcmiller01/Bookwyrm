@@ -1,25 +1,24 @@
 package provider
 
 import (
-	"math"
-	"time"
-
+	"metadata-service/internal/policy"
 	"metadata-service/internal/store"
+	"time"
 )
 
 // Score thresholds — determining health status.
 const (
-	ScoreHealthy    = 0.80
-	ScoreDegraded   = 0.60
-	ScoreUnreliable = 0.40
+	ScoreHealthy    = policy.ScoreHealthy
+	ScoreDegraded   = policy.ScoreDegraded
+	ScoreUnreliable = policy.ScoreUnreliable
 
 	// DecayBaseline is the score a provider regresses toward after inactivity.
-	DecayBaseline = 0.7
+	DecayBaseline = policy.DecayBaseline
 	// DecayDays is the number of days of inactivity before decay begins.
-	DecayDays = 30
+	DecayDays = policy.DecayDays
 
 	// LatencyThresholdMs is the target upper-bound for average latency.
-	LatencyThresholdMs = 2000.0
+	LatencyThresholdMs = policy.LatencyThresholdMs
 )
 
 // ReliabilityScore is a type alias for the store-layer reliability score struct.
@@ -35,30 +34,9 @@ type ReliabilityScore = store.ReliabilityScore
 func ComputeScore(m store.ProviderMetrics) store.ReliabilityScore {
 	rs := store.ReliabilityScore{Provider: m.Provider}
 
-	// --- availability = success / total requests ---
-	var availability float64
-	if m.RequestCount > 0 {
-		availability = float64(m.SuccessCount) / float64(m.RequestCount)
-	} else {
-		availability = DecayBaseline
-	}
-
-	// --- latency_score = 1 - (avg_latency_ms / threshold) ---
-	var latencyScore float64
-	if m.RequestCount > 0 && m.TotalLatencyMs > 0 {
-		avgLatency := float64(m.TotalLatencyMs) / float64(m.RequestCount)
-		latencyScore = 1.0 - (avgLatency / LatencyThresholdMs)
-	} else {
-		latencyScore = DecayBaseline
-	}
-
-	// --- agreement = identifier_matches / identifier_introduced ---
-	var agreementScore float64
-	if m.IdentifierIntroduced > 0 {
-		agreementScore = float64(m.IdentifierMatches) / float64(m.IdentifierIntroduced)
-	} else {
-		agreementScore = DecayBaseline
-	}
+	availability := policy.ComputeAvailability(m.SuccessCount, m.RequestCount)
+	latencyScore := policy.ComputeLatencyScore(m.TotalLatencyMs, m.RequestCount)
+	agreementScore := policy.ComputeAgreementScore(m.IdentifierMatches, m.IdentifierIntroduced)
 
 	// identifier quality mirrors agreement when the provider is actively contributing identifiers
 	identifierQuality := agreementScore
@@ -69,11 +47,11 @@ func ComputeScore(m store.ProviderMetrics) store.ReliabilityScore {
 	// apply inactivity decay
 	composite = applyDecay(composite, m.LastSuccess)
 
-	rs.Availability = clamp(availability)
-	rs.LatencyScore = clamp(latencyScore)
-	rs.AgreementScore = clamp(agreementScore)
-	rs.IdentifierQuality = clamp(identifierQuality)
-	rs.CompositeScore = clamp(composite)
+	rs.Availability = policy.Clamp01(availability)
+	rs.LatencyScore = policy.Clamp01(latencyScore)
+	rs.AgreementScore = policy.Clamp01(agreementScore)
+	rs.IdentifierQuality = policy.Clamp01(identifierQuality)
+	rs.CompositeScore = policy.Clamp01(composite)
 	return rs
 }
 
@@ -84,16 +62,7 @@ func ComputeScore(m store.ProviderMetrics) store.ReliabilityScore {
 //	≥ 0.40  → unreliable
 //	< 0.40  → quarantine
 func HealthStatus(score float64) string {
-	switch {
-	case score > ScoreHealthy:
-		return "healthy"
-	case score >= ScoreDegraded:
-		return "degraded"
-	case score >= ScoreUnreliable:
-		return "unreliable"
-	default:
-		return "quarantine"
-	}
+	return policy.HealthStatus(score)
 }
 
 // TierForScore maps a reliability score to dispatch tier.
@@ -103,41 +72,12 @@ func HealthStatus(score float64) string {
 //	≥ 0.40  → fallback
 //	< 0.40  → quarantine
 func TierForScore(score float64) DispatchTier {
-	switch {
-	case score > ScoreHealthy:
-		return DispatchTierPrimary
-	case score >= ScoreDegraded:
-		return DispatchTierSecondary
-	case score >= ScoreUnreliable:
-		return DispatchTierFallback
-	default:
-		return DispatchTierQuarantine
-	}
+	return policy.TierForScore(score)
 }
 
 // applyDecay moves the composite score toward DecayBaseline when the provider
 // has not been seen for more than DecayDays. The interpolation is linear and
 // completes after a second full DecayDays period of inactivity.
 func applyDecay(score float64, lastSuccess *time.Time) float64 {
-	if lastSuccess == nil {
-		return score
-	}
-	inactive := time.Since(*lastSuccess)
-	threshold := time.Duration(DecayDays) * 24 * time.Hour
-	if inactive <= threshold {
-		return score
-	}
-	// factor ∈ [0, 1]: how far past the threshold we are (caps at 1 after 2×DecayDays)
-	factor := math.Min(1.0, inactive.Hours()/(float64(DecayDays)*24)-1.0)
-	return score + factor*(DecayBaseline-score)
-}
-
-func clamp(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
+	return policy.DecayTowardBaseline(score, lastSuccess)
 }

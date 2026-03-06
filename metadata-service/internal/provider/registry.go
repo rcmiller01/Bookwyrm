@@ -4,20 +4,22 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"metadata-service/internal/policy"
 )
 
 const defaultProviderTimeout = 10 * time.Second
 
 // DispatchTier defines the reliability-based execution tier for providers.
 // Lower values are dispatched earlier.
-type DispatchTier int
+type DispatchTier = policy.Tier
 
 const (
-	DispatchTierPrimary DispatchTier = iota
-	DispatchTierSecondary
-	DispatchTierFallback
-	DispatchTierQuarantine
-	DispatchTierUnclassified // score unavailable; fallback to configured priority
+	DispatchTierPrimary      = policy.TierPrimary
+	DispatchTierSecondary    = policy.TierSecondary
+	DispatchTierFallback     = policy.TierFallback
+	DispatchTierQuarantine   = policy.TierQuarantine
+	DispatchTierUnclassified = policy.TierUnclassified // score unavailable; fallback to configured priority
 )
 
 type registeredProvider struct {
@@ -82,7 +84,7 @@ func (r *Registry) SetReliability(name string, score float64) {
 	if rp, ok := r.providers[name]; ok {
 		rp.hasScore = true
 		rp.reliabilityScore = score
-		rp.tier = TierForScore(score)
+		rp.tier = policy.TierForScore(score)
 	}
 }
 
@@ -158,13 +160,9 @@ func (r *Registry) EnabledProviders() []Provider {
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].hasScore && entries[j].hasScore {
-			if entries[i].tier != entries[j].tier {
-				return entries[i].tier < entries[j].tier
-			}
-			if entries[i].score != entries[j].score {
-				return entries[i].score > entries[j].score
-			}
-			return entries[i].priority < entries[j].priority
+			left := policy.DispatchSortKey(entries[i].tier, entries[i].score, entries[i].priority)
+			right := policy.DispatchSortKey(entries[j].tier, entries[j].score, entries[j].priority)
+			return left.Less(right)
 		}
 		return entries[i].priority < entries[j].priority
 	})

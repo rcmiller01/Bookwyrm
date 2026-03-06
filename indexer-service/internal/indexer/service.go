@@ -50,6 +50,15 @@ func (s *Service) ListProviders(ctx context.Context) []AdapterStatus {
 }
 
 func (s *Service) Search(ctx context.Context, req SearchRequest) (SearchResult, error) {
+	entityRef := req.Metadata.NormalizeEntityRef()
+	if strings.TrimSpace(req.Metadata.WorkID) == "" {
+		if entityRef.Type == "work" {
+			req.Metadata.WorkID = entityRef.ID
+		} else if parentWork := strings.TrimSpace(entityRef.ParentIDs["work"]); parentWork != "" {
+			req.Metadata.WorkID = parentWork
+		}
+	}
+
 	groups := req.BackendGroups
 	if len(groups) == 0 {
 		groups = []string{"prowlarr", "non_prowlarr"}

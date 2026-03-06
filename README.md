@@ -1,5 +1,25 @@
 # Bookwyrm
 
+## Platform Modules (Phase 14)
+
+Phase 14 introduces optional root shared modules for cross-service primitives:
+
+- `platform/normalize`
+- `platform/policy`
+- `platform/queue`
+- `platform/metrics`
+
+Current usage follows a wrapper-first migration pattern:
+
+- Service-internal packages remain the stable call surface.
+- Internal packages may delegate/re-export from `platform/*` modules.
+- Service runtime behavior and external APIs remain unchanged.
+
+Ownership boundary:
+
+- Put generic, reusable primitives in `platform/*`.
+- Keep service-specific orchestration, schema assumptions, and workflow logic in each service module.
+
 ## Provider Dispatch Policy (Phase 3)
 
 Provider reliability now supports a quarantine tier (`score < 0.40`).

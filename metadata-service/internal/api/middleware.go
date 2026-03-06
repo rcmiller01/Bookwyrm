@@ -143,6 +143,7 @@ func rateLimitMiddleware(enabled bool, limiter *apiRateLimiter) mux.MiddlewareFu
 	}
 }
 
+type muxMiddleware = func(http.Handler) http.Handler
 func passthroughMiddleware(next http.Handler) http.Handler { return next }
 
 func extractToken(r *http.Request) string {

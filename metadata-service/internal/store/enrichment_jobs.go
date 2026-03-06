@@ -3,19 +3,20 @@ package store
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"time"
 
 	"metadata-service/internal/metrics"
 	"metadata-service/internal/model"
+	"metadata-service/internal/queue"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 )
 
 const maxEnrichmentBackoff = 6 * time.Hour
+
+var enrichmentBackoffPolicy = queue.NewExponentialBackoffPolicy(maxEnrichmentBackoff)
 
 // ErrNoAvailableEnrichmentJobs indicates queue poll had no lockable jobs.
 var ErrNoAvailableEnrichmentJobs = errors.New("no enrichment jobs available")
@@ -68,8 +69,7 @@ func (s *pgEnrichmentJobStore) EnqueueJob(ctx context.Context, job model.Enrichm
 		return id, nil
 	}
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if queue.IsUniqueViolation(err) {
 		// Duplicate queued/running job is treated as a no-op success.
 		err = s.db.QueryRow(ctx, `
 			SELECT id
@@ -107,28 +107,7 @@ func (s *pgEnrichmentJobStore) GetJobByID(ctx context.Context, id int64) (*model
 }
 
 func (s *pgEnrichmentJobStore) TryLockNextJob(ctx context.Context, workerID string) (*model.EnrichmentJob, error) {
-	row := s.db.QueryRow(ctx, `
-		WITH next_job AS (
-			SELECT id
-			FROM enrichment_jobs
-			WHERE status = 'queued'
-			  AND (not_before IS NULL OR not_before <= NOW())
-			ORDER BY priority ASC, created_at ASC
-			FOR UPDATE SKIP LOCKED
-			LIMIT 1
-		)
-		UPDATE enrichment_jobs AS j
-		SET status = 'running',
-		    locked_at = NOW(),
-		    locked_by = $1,
-		    updated_at = NOW()
-		FROM next_job
-		WHERE j.id = next_job.id
-		RETURNING j.id, j.job_type, j.entity_type, j.entity_id, j.status, j.priority,
-		          j.attempt_count, j.max_attempts, j.not_before, j.locked_at, j.locked_by,
-		          j.last_error, j.created_at, j.updated_at`,
-		workerID,
-	)
+	row := s.db.QueryRow(ctx, queue.LockNextQueuedQuery("enrichment_jobs"), workerID)
 
 	var job model.EnrichmentJob
 	if err := row.Scan(
@@ -298,66 +277,14 @@ func (s *pgEnrichmentJobStore) ListJobs(ctx context.Context, filters model.Enric
 }
 
 func (s *pgEnrichmentJobStore) CountJobsByStatus(ctx context.Context) (map[string]int64, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT status, COUNT(*)
-		FROM enrichment_jobs
-		GROUP BY status`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := map[string]int64{}
-	for rows.Next() {
-		var status string
-		var count int64
-		if scanErr := rows.Scan(&status, &count); scanErr != nil {
-			return nil, scanErr
-		}
-		out[status] = count
-	}
-	return out, rows.Err()
+	return queue.CountByStatus(ctx, s.db, "enrichment_jobs")
 }
 
 func (s *pgEnrichmentJobStore) NextRunnableAt(ctx context.Context) (*time.Time, error) {
-	var nextAt *time.Time
-	err := s.db.QueryRow(ctx, `
-		SELECT MIN(
-			CASE
-				WHEN not_before IS NULL OR not_before <= NOW() THEN NOW()
-				ELSE not_before
-			END
-		)
-		FROM enrichment_jobs
-		WHERE status = 'queued'`,
-	).Scan(&nextAt)
-	if err != nil {
-		return nil, err
-	}
-	return nextAt, nil
+	return queue.NextRunnableAt(ctx, s.db, "enrichment_jobs")
 }
 
 // nextBackoff returns exponential backoff with jitter, capped at maxEnrichmentBackoff.
 func nextBackoff(attempt int) time.Duration {
-	if attempt < 1 {
-		attempt = 1
-	}
-	base := time.Second * time.Duration(1<<minInt(attempt-1, 12))
-	if base > maxEnrichmentBackoff {
-		base = maxEnrichmentBackoff
-	}
-	jitter := time.Duration(rand.Int63n(int64(base / 5))) // up to 20%
-	wait := base + jitter
-	if wait > maxEnrichmentBackoff {
-		return maxEnrichmentBackoff
-	}
-	return wait
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return enrichmentBackoffPolicy.Next(attempt)
 }

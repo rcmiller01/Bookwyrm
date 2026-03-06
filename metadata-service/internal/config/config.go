@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"metadata-service/internal/policy"
 	"os"
 	"strings"
 
@@ -187,14 +188,7 @@ func Load(path string) (*Config, error) {
 	hasDispatchPolicy := false
 	if pc, ok := cfg.Providers["dispatch_policy"]; ok {
 		hasDispatchPolicy = true
-		mode := strings.ToLower(strings.TrimSpace(pc.QuarantineMode))
-		if mode == "" {
-			if pc.DisableDispatch {
-				mode = "disabled"
-			} else {
-				mode = "last_resort"
-			}
-		}
+		mode := policy.NormalizeQuarantineMode(pc.QuarantineMode, pc.DisableDispatch)
 		cfg.ProviderDispatchPolicy.QuarantineMode = mode
 		cfg.ProviderDispatchPolicy.Source = "providers.dispatch_policy.quarantine_mode"
 		delete(cfg.Providers, "dispatch_policy")
@@ -202,14 +196,7 @@ func Load(path string) (*Config, error) {
 
 	if quarantine, ok := cfg.Providers["quarantine"]; ok {
 		if !hasDispatchPolicy {
-			mode := strings.ToLower(strings.TrimSpace(quarantine.QuarantineMode))
-			if mode == "" {
-				if quarantine.DisableDispatch {
-					mode = "disabled"
-				} else {
-					mode = "last_resort"
-				}
-			}
+			mode := policy.NormalizeQuarantineMode(quarantine.QuarantineMode, quarantine.DisableDispatch)
 			cfg.ProviderDispatchPolicy.QuarantineMode = mode
 			cfg.ProviderDispatchPolicy.Source = "providers.quarantine.disable_dispatch"
 		}
