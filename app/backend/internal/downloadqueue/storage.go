@@ -18,11 +18,16 @@ type Storage interface {
 	ListJobs(filter JobFilter) []Job
 	ClaimNextQueued(workerID string, now time.Time) (Job, bool, error)
 	ListActiveJobs(limit int) []Job
+	ListCompletedNotImported(limit int) []Job
 	MarkSubmitted(id int64, downloadID string) error
 	UpdateProgress(id int64, status JobStatus, outputPath string, lastErr string) error
+	MarkImported(id int64, imported bool) error
 	Reschedule(id int64, errMsg string, notBefore time.Time, terminal bool) error
 	CancelJob(id int64) error
 	RetryJob(id int64) error
 
 	AddEvent(event Event) (Event, error)
+
+	RecordClientResult(clientID string, success bool, latency time.Duration, terminalComplete bool) error
+	RecomputeClientReliability() error
 }

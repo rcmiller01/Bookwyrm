@@ -11,16 +11,21 @@ import (
 )
 
 type Manager struct {
-	store         Storage
-	downloadSvc   *download.Service
-	indexerClient *indexer.Client
+	store          Storage
+	downloadSvc    *download.Service
+	indexerClient  *indexer.Client
+	quarantineMode string
 }
 
-func NewManager(store Storage, downloadSvc *download.Service, indexerClient *indexer.Client) *Manager {
+func NewManager(store Storage, downloadSvc *download.Service, indexerClient *indexer.Client, quarantineMode string) *Manager {
+	if strings.TrimSpace(quarantineMode) == "" {
+		quarantineMode = "last_resort"
+	}
 	return &Manager{
-		store:         store,
-		downloadSvc:   downloadSvc,
-		indexerClient: indexerClient,
+		store:          store,
+		downloadSvc:    downloadSvc,
+		indexerClient:  indexerClient,
+		quarantineMode: quarantineMode,
 	}
 }
 
@@ -56,14 +61,10 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 	}
 	clientName := strings.TrimSpace(preferredClient)
 	if clientName == "" {
-		switch protocol {
-		case "usenet":
-			clientName = "nzbget"
-		case "torrent":
-			clientName = "qbittorrent"
-		default:
-			clientName = "nzbget"
-		}
+		clientName = m.pickClient(protocol)
+	}
+	if clientName == "" {
+		return Job{}, fmt.Errorf("no enabled download client for protocol %s", protocol)
 	}
 
 	job, err := m.store.CreateJob(Job{
@@ -96,6 +97,7 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 func (m *Manager) Start(ctx context.Context) {
 	go m.submitWorker(ctx)
 	go m.pollWorker(ctx)
+	go m.reliabilityWorker(ctx)
 }
 
 func (m *Manager) ListJobs(filter JobFilter) []Job {
@@ -150,6 +152,7 @@ func (m *Manager) submitWorker(ctx context.Context) {
 				_ = m.store.Reschedule(job.ID, "missing request_payload.uri", time.Now().UTC().Add(5*time.Second), job.AttemptCount >= job.MaxAttempts)
 				continue
 			}
+			start := time.Now()
 			downloadID, _, addErr := m.downloadSvc.AddDownload(ctx, job.ClientName, download.AddRequest{
 				URI: uri,
 				Category: firstNonEmpty(
@@ -162,6 +165,7 @@ func (m *Manager) submitWorker(ctx context.Context) {
 				},
 			})
 			if addErr != nil {
+				_ = m.store.RecordClientResult(job.ClientName, false, time.Since(start), false)
 				_ = m.store.Reschedule(job.ID, addErr.Error(), time.Now().UTC().Add(backoffForAttempt(job.AttemptCount)), job.AttemptCount >= job.MaxAttempts)
 				_, _ = m.store.AddEvent(Event{
 					JobID:     job.ID,
@@ -171,6 +175,7 @@ func (m *Manager) submitWorker(ctx context.Context) {
 				})
 				continue
 			}
+			_ = m.store.RecordClientResult(job.ClientName, true, time.Since(start), false)
 			_ = m.store.MarkSubmitted(job.ID, downloadID)
 			_, _ = m.store.AddEvent(Event{
 				JobID:     job.ID,
@@ -194,8 +199,10 @@ func (m *Manager) pollWorker(ctx context.Context) {
 				if strings.TrimSpace(job.DownloadID) == "" {
 					continue
 				}
+				start := time.Now()
 				status, _, err := m.downloadSvc.GetStatus(ctx, job.ClientName, job.DownloadID)
 				if err != nil {
+					_ = m.store.RecordClientResult(job.ClientName, false, time.Since(start), false)
 					_ = m.store.UpdateProgress(job.ID, JobStatusFailed, "", err.Error())
 					_, _ = m.store.AddEvent(Event{
 						JobID:     job.ID,
@@ -206,6 +213,7 @@ func (m *Manager) pollWorker(ctx context.Context) {
 					continue
 				}
 				nextStatus := normalizeState(status.State)
+				_ = m.store.RecordClientResult(job.ClientName, true, time.Since(start), nextStatus == JobStatusCompleted)
 				_ = m.store.UpdateProgress(job.ID, nextStatus, status.OutputPath, "")
 				if nextStatus == JobStatusCompleted || nextStatus == JobStatusFailed {
 					_, _ = m.store.AddEvent(Event{
@@ -218,6 +226,40 @@ func (m *Manager) pollWorker(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (m *Manager) reliabilityWorker(ctx context.Context) {
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = m.store.RecomputeClientReliability()
+		}
+	}
+}
+
+func (m *Manager) pickClient(protocol string) string {
+	for _, rec := range m.store.ListClients() {
+		if !rec.Enabled {
+			continue
+		}
+		if rec.Tier == "quarantine" && m.quarantineMode == "disabled" {
+			continue
+		}
+		if protocol == "usenet" && rec.ClientType != "nzbget" && rec.ClientType != "sabnzbd" {
+			continue
+		}
+		if protocol == "torrent" && rec.ClientType != "qbittorrent" {
+			continue
+		}
+		if m.downloadSvc.HasClient(rec.ID) {
+			return rec.ID
+		}
+	}
+	return ""
 }
 
 func normalizeState(state string) JobStatus {

@@ -102,17 +102,33 @@ func (c *SABnzbdClient) GetStatus(ctx context.Context, downloadID string) (Downl
 		return DownloadStatus{}, err
 	}
 	slot, ok := findSABSlot(payload, downloadID)
+	if ok {
+		state := normalizeSABState(toString(slot["status"]), toString(slot["mbleft"]))
+		progress := parsePercent(slot["percentage"])
+		return DownloadStatus{
+			Client:   c.Name(),
+			ID:       downloadID,
+			State:    state,
+			Progress: progress,
+			Raw:      slot,
+		}, nil
+	}
+	historySlot, ok := c.findHistorySlot(ctx, downloadID)
 	if !ok {
 		return DownloadStatus{}, ErrDownloadNotFound
 	}
-	state := normalizeSABState(toString(slot["status"]), toString(slot["mbleft"]))
-	progress := parsePercent(slot["percentage"])
+	state := "completed"
+	if strings.Contains(strings.ToLower(toString(historySlot["status"])), "fail") {
+		state = "failed"
+	}
+	outputPath := firstNonEmpty(toString(historySlot["storage"]), toString(historySlot["path"]), toString(historySlot["nzb_name"]))
 	return DownloadStatus{
-		Client:   c.Name(),
-		ID:       downloadID,
-		State:    state,
-		Progress: progress,
-		Raw:      slot,
+		Client:     c.Name(),
+		ID:         downloadID,
+		State:      state,
+		Progress:   100,
+		OutputPath: outputPath,
+		Raw:        historySlot,
 	}, nil
 }
 
@@ -180,13 +196,61 @@ func findSABSlot(payload map[string]any, downloadID string) (map[string]any, boo
 }
 
 func normalizeSABState(status string, mbLeft string) string {
-	if strings.EqualFold(strings.TrimSpace(status), "Paused") {
-		return "paused"
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch {
+	case strings.Contains(normalized, "repair"):
+		return "repairing"
+	case strings.Contains(normalized, "extract") || strings.Contains(normalized, "unpack"):
+		return "unpacking"
+	case strings.Contains(normalized, "pause"):
+		return "submitted"
 	}
 	if strings.TrimSpace(mbLeft) == "0.00" || strings.TrimSpace(mbLeft) == "0" {
 		return "completed"
 	}
 	return "downloading"
+}
+
+func (c *SABnzbdClient) findHistorySlot(ctx context.Context, downloadID string) (map[string]any, bool) {
+	params := c.baseParams()
+	params.Set("mode", "history")
+	params.Set("failed", "1")
+	params.Set("limit", "100")
+	endpoint := c.baseURL + "/api?" + params.Encode()
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, false
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, false
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, false
+	}
+	history, ok := payload["history"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	slots, ok := history["slots"].([]any)
+	if !ok {
+		return nil, false
+	}
+	for _, raw := range slots {
+		slot, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(toString(slot["nzo_id"])) == strings.TrimSpace(downloadID) {
+			return slot, true
+		}
+	}
+	return nil, false
 }
 
 func parsePercent(v any) float64 {

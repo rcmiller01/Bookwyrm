@@ -53,6 +53,15 @@ func (s *Service) Register(client Client) {
 	s.clients[strings.ToLower(strings.TrimSpace(client.Name()))] = client
 }
 
+func (s *Service) HasClient(clientName string) bool {
+	key := strings.ToLower(strings.TrimSpace(clientName))
+	if key == "" {
+		return false
+	}
+	_, ok := s.clients[key]
+	return ok
+}
+
 func (s *Service) AddDownload(ctx context.Context, clientName string, req AddRequest) (string, string, error) {
 	client, resolvedName, err := s.resolveClient(clientName)
 	if err != nil {

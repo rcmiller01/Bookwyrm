@@ -20,24 +20,32 @@ func (s *PGStore) UpsertClient(rec DownloadClientRecord) DownloadClientRecord {
 	if rec.Priority == 0 {
 		rec.Priority = 100
 	}
+	if rec.Tier == "" {
+		rec.Tier = "unclassified"
+	}
+	if rec.ReliabilityScore == 0 {
+		rec.ReliabilityScore = 0.70
+	}
 	cfg, _ := json.Marshal(rec.Config)
 	_, _ = s.db.ExecContext(context.Background(), `
-		INSERT INTO download_clients(id,name,client_type,enabled,priority,config_json,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,NOW(),NOW())
+		INSERT INTO download_clients(id,name,client_type,enabled,tier,reliability_score,priority,config_json,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
 		ON CONFLICT(id) DO UPDATE SET
 		  name=EXCLUDED.name,
 		  client_type=EXCLUDED.client_type,
 		  enabled=EXCLUDED.enabled,
+		  tier=EXCLUDED.tier,
+		  reliability_score=EXCLUDED.reliability_score,
 		  priority=EXCLUDED.priority,
 		  config_json=EXCLUDED.config_json,
 		  updated_at=NOW()`,
-		rec.ID, rec.Name, rec.ClientType, rec.Enabled, rec.Priority, cfg,
+		rec.ID, rec.Name, rec.ClientType, rec.Enabled, rec.Tier, rec.ReliabilityScore, rec.Priority, cfg,
 	)
 	return rec
 }
 
 func (s *PGStore) ListClients() []DownloadClientRecord {
-	rows, err := s.db.QueryContext(context.Background(), `SELECT id,name,client_type,enabled,priority,config_json,created_at,updated_at FROM download_clients ORDER BY priority ASC`)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT id,name,client_type,enabled,COALESCE(tier,'unclassified'),COALESCE(reliability_score,0.70),priority,config_json,created_at,updated_at FROM download_clients ORDER BY priority ASC`)
 	if err != nil {
 		return nil
 	}
@@ -46,7 +54,7 @@ func (s *PGStore) ListClients() []DownloadClientRecord {
 	for rows.Next() {
 		var rec DownloadClientRecord
 		var cfg []byte
-		if err := rows.Scan(&rec.ID, &rec.Name, &rec.ClientType, &rec.Enabled, &rec.Priority, &cfg, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Name, &rec.ClientType, &rec.Enabled, &rec.Tier, &rec.ReliabilityScore, &rec.Priority, &cfg, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 			continue
 		}
 		_ = json.Unmarshal(cfg, &rec.Config)
@@ -64,19 +72,19 @@ func (s *PGStore) CreateJob(job Job) (Job, error) {
 	}
 	payload, _ := json.Marshal(job.RequestPayload)
 	row := s.db.QueryRowContext(context.Background(), `
-		INSERT INTO download_jobs(grab_id,candidate_id,work_id,edition_id,protocol,client_name,status,request_payload,max_attempts,not_before,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,NOW(),NOW())
-		RETURNING id,status,attempt_count,created_at,updated_at`,
+		INSERT INTO download_jobs(grab_id,candidate_id,work_id,edition_id,protocol,client_name,status,request_payload,max_attempts,not_before,imported,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,false,NOW(),NOW())
+		RETURNING id,status,attempt_count,imported,created_at,updated_at`,
 		job.GrabID, job.CandidateID, job.WorkID, job.EditionID, job.Protocol, job.ClientName, payload, job.MaxAttempts, job.NotBefore.UTC(),
 	)
-	if err := row.Scan(&job.ID, &job.Status, &job.AttemptCount, &job.CreatedAt, &job.UpdatedAt); err != nil {
+	if err := row.Scan(&job.ID, &job.Status, &job.AttemptCount, &job.Imported, &job.CreatedAt, &job.UpdatedAt); err != nil {
 		return Job{}, err
 	}
 	return job, nil
 }
 
 func (s *PGStore) GetJob(id int64) (Job, error) {
-	row := s.db.QueryRowContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE id=$1`, id)
+	row := s.db.QueryRowContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE id=$1`, id)
 	return scanJob(row)
 }
 
@@ -87,10 +95,14 @@ func (s *PGStore) ListJobs(filter JobFilter) []Job {
 	}
 	var rows *sql.Rows
 	var err error
-	if filter.Status == "" {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs ORDER BY created_at DESC LIMIT $1`, limit)
+	if filter.Status == "" && filter.Imported == nil {
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs ORDER BY created_at DESC LIMIT $1`, limit)
+	} else if filter.Imported == nil {
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE status=$1 ORDER BY created_at DESC LIMIT $2`, string(filter.Status), limit)
+	} else if filter.Status == "" {
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE imported=$1 ORDER BY created_at DESC LIMIT $2`, *filter.Imported, limit)
 	} else {
-		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE status=$1 ORDER BY created_at DESC LIMIT $2`, string(filter.Status), limit)
+		rows, err = s.db.QueryContext(context.Background(), `SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at FROM download_jobs WHERE status=$1 AND imported=$2 ORDER BY created_at DESC LIMIT $3`, string(filter.Status), *filter.Imported, limit)
 	}
 	if err != nil {
 		return nil
@@ -115,7 +127,7 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 	defer tx.Rollback()
 
 	row := tx.QueryRowContext(context.Background(), `
-		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
 		FROM download_jobs
 		WHERE status='queued' AND not_before <= $1
 		ORDER BY created_at ASC
@@ -151,7 +163,7 @@ func (s *PGStore) ListActiveJobs(limit int) []Job {
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
 		FROM download_jobs
 		WHERE status IN ('submitted','downloading','repairing','unpacking')
 		ORDER BY updated_at DESC
@@ -172,6 +184,31 @@ func (s *PGStore) ListActiveJobs(limit int) []Job {
 	return out
 }
 
+func (s *PGStore) ListCompletedNotImported(limit int) []Job {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id,grab_id,candidate_id,work_id,COALESCE(edition_id,''),protocol,client_name,status,COALESCE(download_id,''),COALESCE(output_path,''),imported,request_payload,COALESCE(last_error,''),attempt_count,max_attempts,not_before,locked_at,COALESCE(locked_by,''),created_at,updated_at
+		FROM download_jobs
+		WHERE status='completed' AND imported=false
+		ORDER BY updated_at ASC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []Job{}
+	for rows.Next() {
+		job, scanErr := scanJob(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, job)
+	}
+	return out
+}
+
 func (s *PGStore) MarkSubmitted(id int64, downloadID string) error {
 	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET download_id=$2,status='downloading',locked_at=NULL,locked_by='',updated_at=NOW() WHERE id=$1`, id, downloadID)
 	if err != nil {
@@ -185,6 +222,17 @@ func (s *PGStore) MarkSubmitted(id int64, downloadID string) error {
 
 func (s *PGStore) UpdateProgress(id int64, status JobStatus, outputPath string, lastErr string) error {
 	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET status=$2,output_path=CASE WHEN $3='' THEN output_path ELSE $3 END,last_error=$4,updated_at=NOW() WHERE id=$1`, id, string(status), outputPath, lastErr)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) MarkImported(id int64, imported bool) error {
+	tag, err := s.db.ExecContext(context.Background(), `UPDATE download_jobs SET imported=$2,updated_at=NOW() WHERE id=$1`, id, imported)
 	if err != nil {
 		return err
 	}
@@ -241,6 +289,102 @@ func (s *PGStore) AddEvent(event Event) (Event, error) {
 	return event, nil
 }
 
+func (s *PGStore) RecordClientResult(clientID string, success bool, latency time.Duration, terminalComplete bool) error {
+	successInc := 0
+	failureInc := 0
+	completionInc := 0
+	if success {
+		successInc = 1
+	} else {
+		failureInc = 1
+	}
+	if terminalComplete {
+		completionInc = 1
+	}
+	_, err := s.db.ExecContext(context.Background(), `
+		INSERT INTO download_client_metrics(client_id,success_count,failure_count,total_latency_ms,poll_count,completion_count,updated_at)
+		VALUES($1,$2,$3,$4,1,$5,NOW())
+		ON CONFLICT(client_id) DO UPDATE SET
+		  success_count=download_client_metrics.success_count + EXCLUDED.success_count,
+		  failure_count=download_client_metrics.failure_count + EXCLUDED.failure_count,
+		  total_latency_ms=download_client_metrics.total_latency_ms + EXCLUDED.total_latency_ms,
+		  poll_count=download_client_metrics.poll_count + 1,
+		  completion_count=download_client_metrics.completion_count + EXCLUDED.completion_count,
+		  updated_at=NOW()`,
+		clientID, successInc, failureInc, latency.Milliseconds(), completionInc,
+	)
+	return err
+}
+
+func (s *PGStore) RecomputeClientReliability() error {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT
+		  c.id,
+		  COALESCE(m.success_count,0),
+		  COALESCE(m.failure_count,0),
+		  COALESCE(m.total_latency_ms,0),
+		  COALESCE(m.poll_count,0),
+		  COALESCE(m.completion_count,0)
+		FROM download_clients c
+		LEFT JOIN download_client_metrics m ON m.client_id=c.id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for rows.Next() {
+		var id string
+		var successCount, failureCount, totalLatencyMS, pollCount, completionCount int64
+		if err := rows.Scan(&id, &successCount, &failureCount, &totalLatencyMS, &pollCount, &completionCount); err != nil {
+			return err
+		}
+		availability := 0.70
+		total := successCount + failureCount
+		if total > 0 {
+			availability = float64(successCount) / float64(total)
+		}
+		latencyScore := 0.70
+		if pollCount > 0 {
+			avg := float64(totalLatencyMS) / float64(pollCount)
+			latencyScore = 1.0 - (avg / 5000.0)
+			if latencyScore < 0 {
+				latencyScore = 0
+			}
+		}
+		completion := 0.70
+		if pollCount > 0 {
+			completion = float64(completionCount) / float64(pollCount)
+		}
+		score := (availability * 0.50) + (latencyScore * 0.30) + (completion * 0.20)
+		tier := reliabilityTier(score)
+		if _, err := tx.ExecContext(context.Background(), `
+			INSERT INTO download_client_reliability(client_id,availability_score,latency_score,completion_score,composite_score,tier,computed_at)
+			VALUES($1,$2,$3,$4,$5,$6,NOW())
+			ON CONFLICT(client_id) DO UPDATE SET
+			  availability_score=EXCLUDED.availability_score,
+			  latency_score=EXCLUDED.latency_score,
+			  completion_score=EXCLUDED.completion_score,
+			  composite_score=EXCLUDED.composite_score,
+			  tier=EXCLUDED.tier,
+			  computed_at=NOW()`,
+			id, availability, latencyScore, completion, score, tier,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(context.Background(), `UPDATE download_clients SET reliability_score=$2,tier=$3,updated_at=NOW() WHERE id=$1`, id, score, tier); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -260,6 +404,7 @@ func scanJob(row rowScanner) (Job, error) {
 		&status,
 		&job.DownloadID,
 		&job.OutputPath,
+		&job.Imported,
 		&payload,
 		&job.LastError,
 		&job.AttemptCount,

@@ -34,6 +34,7 @@ func main() {
 	nzbgetUser := os.Getenv("NZBGET_USERNAME")
 	nzbgetPass := os.Getenv("NZBGET_PASSWORD")
 	nzbgetCategory := envOrDefault("NZBGET_CATEGORY", "books")
+	downloadQuarantineMode := envOrDefault("DOWNLOAD_QUARANTINE_MODE", "last_resort")
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 
@@ -77,7 +78,7 @@ func main() {
 	downloadStore, closeDownloadStore := initDownloadStore(databaseDSN)
 	defer closeDownloadStore()
 	seedDownloadClients(downloadStore, qbitURL != "", sabURL != "", nzbgetURL != "")
-	downloadManager := downloadqueue.NewManager(downloadStore, downloadService, indexerClient)
+	downloadManager := downloadqueue.NewManager(downloadStore, downloadService, indexerClient, downloadQuarantineMode)
 	downloadManager.Start(context.Background())
 
 	jobStore := store.NewInMemoryJobStore()
@@ -139,32 +140,38 @@ func initDownloadStore(databaseDSN string) (downloadqueue.Storage, func()) {
 func seedDownloadClients(store downloadqueue.Storage, hasQbit bool, hasSab bool, hasNZBGet bool) {
 	if hasQbit {
 		store.UpsertClient(downloadqueue.DownloadClientRecord{
-			ID:         "qbittorrent",
-			Name:       "qBittorrent",
-			ClientType: "qbittorrent",
-			Enabled:    true,
-			Priority:   200,
-			Config:     map[string]any{},
+			ID:               "qbittorrent",
+			Name:             "qBittorrent",
+			ClientType:       "qbittorrent",
+			Enabled:          true,
+			Tier:             "secondary",
+			ReliabilityScore: 0.70,
+			Priority:         200,
+			Config:           map[string]any{},
 		})
 	}
 	if hasSab {
 		store.UpsertClient(downloadqueue.DownloadClientRecord{
-			ID:         "sabnzbd",
-			Name:       "SABnzbd",
-			ClientType: "sabnzbd",
-			Enabled:    true,
-			Priority:   150,
-			Config:     map[string]any{},
+			ID:               "sabnzbd",
+			Name:             "SABnzbd",
+			ClientType:       "sabnzbd",
+			Enabled:          true,
+			Tier:             "secondary",
+			ReliabilityScore: 0.70,
+			Priority:         150,
+			Config:           map[string]any{},
 		})
 	}
 	if hasNZBGet {
 		store.UpsertClient(downloadqueue.DownloadClientRecord{
-			ID:         "nzbget",
-			Name:       "NZBGet",
-			ClientType: "nzbget",
-			Enabled:    true,
-			Priority:   100,
-			Config:     map[string]any{},
+			ID:               "nzbget",
+			Name:             "NZBGet",
+			ClientType:       "nzbget",
+			Enabled:          true,
+			Tier:             "primary",
+			ReliabilityScore: 0.80,
+			Priority:         100,
+			Config:           map[string]any{},
 		})
 	}
 }

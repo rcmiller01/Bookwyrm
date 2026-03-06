@@ -58,7 +58,7 @@ func TestManagerEnqueueFromGrab(t *testing.T) {
 	store := NewStore()
 	downloadSvc := download.NewService(&fakeDownloadClient{})
 	indexerClient := indexer.NewClient(indexer.Config{BaseURL: idx.URL, Timeout: time.Second})
-	manager := NewManager(store, downloadSvc, indexerClient)
+	manager := NewManager(store, downloadSvc, indexerClient, "last_resort")
 
 	job, err := manager.EnqueueFromGrab(context.Background(), 10, "nzbget")
 	if err != nil {

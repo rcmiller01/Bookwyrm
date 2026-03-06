@@ -16,14 +16,16 @@ const (
 )
 
 type DownloadClientRecord struct {
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
-	ClientType string         `json:"client_type"`
-	Enabled    bool           `json:"enabled"`
-	Priority   int            `json:"priority"`
-	Config     map[string]any `json:"config_json,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	ClientType       string         `json:"client_type"`
+	Enabled          bool           `json:"enabled"`
+	Tier             string         `json:"tier"`
+	ReliabilityScore float64        `json:"reliability_score"`
+	Priority         int            `json:"priority"`
+	Config           map[string]any `json:"config_json,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
 type Job struct {
@@ -37,6 +39,7 @@ type Job struct {
 	Status         JobStatus      `json:"status"`
 	DownloadID     string         `json:"download_id,omitempty"`
 	OutputPath     string         `json:"output_path,omitempty"`
+	Imported       bool           `json:"imported"`
 	RequestPayload map[string]any `json:"request_payload,omitempty"`
 	LastError      string         `json:"last_error,omitempty"`
 	AttemptCount   int            `json:"attempt_count"`
@@ -58,6 +61,7 @@ type Event struct {
 }
 
 type JobFilter struct {
-	Status JobStatus
-	Limit  int
+	Status   JobStatus
+	Imported *bool
+	Limit    int
 }

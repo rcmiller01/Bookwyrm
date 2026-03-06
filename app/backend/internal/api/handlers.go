@@ -358,6 +358,10 @@ func (h *Handlers) ListDownloadJobs(w http.ResponseWriter, r *http.Request) {
 		Status: downloadqueue.JobStatus(strings.TrimSpace(r.URL.Query().Get("status"))),
 		Limit:  limit,
 	}
+	if rawImported := strings.TrimSpace(r.URL.Query().Get("imported")); rawImported != "" {
+		imported := strings.EqualFold(rawImported, "true") || rawImported == "1"
+		filter.Imported = &imported
+	}
 	items := h.downloadMgr.ListJobs(filter)
 	writeJSON(w, map[string]any{"items": items})
 }
