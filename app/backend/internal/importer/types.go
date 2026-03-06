@@ -14,21 +14,22 @@ const (
 )
 
 type Job struct {
-	ID            int64          `json:"id"`
-	DownloadJobID int64          `json:"download_job_id"`
-	WorkID        string         `json:"work_id,omitempty"`
-	EditionID     string         `json:"edition_id,omitempty"`
-	SourcePath    string         `json:"source_path"`
-	TargetRoot    string         `json:"target_root"`
-	TargetPath    string         `json:"target_path,omitempty"`
-	Status        JobStatus      `json:"status"`
-	AttemptCount  int            `json:"attempt_count"`
-	MaxAttempts   int            `json:"max_attempts"`
-	NamingResult  map[string]any `json:"naming_result_json,omitempty"`
-	Decision      map[string]any `json:"decision_json,omitempty"`
-	LastError     string         `json:"last_error,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	ID             int64          `json:"id"`
+	DownloadJobID  int64          `json:"download_job_id"`
+	WorkID         string         `json:"work_id,omitempty"`
+	EditionID      string         `json:"edition_id,omitempty"`
+	SourcePath     string         `json:"source_path"`
+	TargetRoot     string         `json:"target_root"`
+	TargetPath     string         `json:"target_path,omitempty"`
+	Status         JobStatus      `json:"status"`
+	AttemptCount   int            `json:"attempt_count"`
+	MaxAttempts    int            `json:"max_attempts"`
+	RenameTemplate string         `json:"rename_template,omitempty"`
+	NamingResult   map[string]any `json:"naming_result_json,omitempty"`
+	Decision       map[string]any `json:"decision_json,omitempty"`
+	LastError      string         `json:"last_error,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 type Event struct {
@@ -56,7 +57,13 @@ type JobFilter struct {
 }
 
 type Config struct {
-	LibraryRoot          string
-	AllowCrossDeviceMove bool
-	MaxScanFiles         int
+	LibraryRoot             string
+	AllowCrossDeviceMove    bool
+	MaxScanFiles            int
+	TemplateEbook           string
+	TemplateAudiobookSingle string
+	TemplateAudiobookFolder string
+	MaxPathLen              int
+	ReplaceColon            bool
+	KeepIncoming            bool
 }

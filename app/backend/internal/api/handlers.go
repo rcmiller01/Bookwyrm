@@ -11,6 +11,7 @@ import (
 
 	"app-backend/internal/domain"
 	"app-backend/internal/downloadqueue"
+	"app-backend/internal/importer"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
 	"app-backend/internal/jobs"
@@ -25,6 +26,13 @@ type Handlers struct {
 	watchlistStore store.WatchlistStore
 	jobService     *jobs.Service
 	downloadMgr    *downloadqueue.Manager
+	importStore    importer.Store
+	importConfig   ImportConfig
+}
+
+type ImportConfig struct {
+	KeepIncoming bool
+	Source       string
 }
 
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
@@ -37,6 +45,14 @@ func (h *Handlers) SetJobService(jobService *jobs.Service) {
 
 func (h *Handlers) SetDownloadManager(downloadMgr *downloadqueue.Manager) {
 	h.downloadMgr = downloadMgr
+}
+
+func (h *Handlers) SetImportStore(importStore importer.Store) {
+	h.importStore = importStore
+}
+
+func (h *Handlers) SetImportConfig(cfg ImportConfig) {
+	h.importConfig = cfg
 }
 
 func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
@@ -453,6 +469,166 @@ func (h *Handlers) RetryDownloadJob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handlers) ListImportJobs(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	filter := importer.JobFilter{
+		Status: importer.JobStatus(strings.TrimSpace(r.URL.Query().Get("status"))),
+		Limit:  limit,
+	}
+	writeJSON(w, map[string]any{"items": h.importStore.ListJobs(filter)})
+}
+
+func (h *Handlers) GetImportJob(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid import job id", http.StatusBadRequest)
+		return
+	}
+	job, err := h.importStore.GetJob(id)
+	if err != nil {
+		if err == importer.ErrNotFound {
+			writeError(w, "import job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to load import job", http.StatusInternalServerError)
+		return
+	}
+	events := h.importStore.ListEvents(id)
+	writeJSON(w, map[string]any{"job": job, "events": events})
+}
+
+func (h *Handlers) ApproveImportJob(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid import job id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		WorkID           string `json:"work_id"`
+		EditionID        string `json:"edition_id"`
+		TemplateOverride string `json:"template_override"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.WorkID) == "" {
+		writeError(w, "work_id is required", http.StatusBadRequest)
+		return
+	}
+	if err := h.importStore.Approve(id, strings.TrimSpace(body.WorkID), strings.TrimSpace(body.EditionID), strings.TrimSpace(body.TemplateOverride)); err != nil {
+		if err == importer.ErrNotFound {
+			writeError(w, "import job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to approve import job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) RetryImportJob(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid import job id", http.StatusBadRequest)
+		return
+	}
+	if err := h.importStore.Retry(id); err != nil {
+		if err == importer.ErrNotFound {
+			writeError(w, "import job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to retry import job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) SkipImportJob(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(mux.Vars(r)["id"]), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, "invalid import job id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := h.importStore.Skip(id, strings.TrimSpace(body.Reason)); err != nil {
+		if err == importer.ErrNotFound {
+			writeError(w, "import job not found", http.StatusNotFound)
+			return
+		}
+		writeError(w, "failed to skip import job", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) ListLibraryItems(w http.ResponseWriter, r *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	workID := strings.TrimSpace(r.URL.Query().Get("work_id"))
+	items := h.importStore.ListLibraryItems(workID, limit)
+	writeJSON(w, map[string]any{"items": items})
+}
+
+func (h *Handlers) GetImportStats(w http.ResponseWriter, _ *http.Request) {
+	if h.importStore == nil {
+		writeError(w, "import store not configured", http.StatusServiceUnavailable)
+		return
+	}
+	counts := h.importStore.CountJobsByStatus()
+	writeJSON(w, map[string]any{
+		"counts": map[string]int{
+			"queued":       counts[importer.JobStatusQueued],
+			"running":      counts[importer.JobStatusRunning],
+			"needs_review": counts[importer.JobStatusNeedsReview],
+			"imported":     counts[importer.JobStatusImported],
+			"failed":       counts[importer.JobStatusFailed],
+			"skipped":      counts[importer.JobStatusSkipped],
+		},
+		"next_runnable_at": nil,
+		"keep_incoming": map[string]any{
+			"value":  h.importConfig.KeepIncoming,
+			"source": fallbackString(h.importConfig.Source, "default"),
+		},
+	})
+}
+
 func userIDFromRequest(r *http.Request) string {
 	if id := strings.TrimSpace(r.Header.Get("X-User-ID")); id != "" {
 		return id
@@ -502,6 +678,13 @@ func splitCSV(value string) []string {
 		}
 	}
 	return out
+}
+
+func fallbackString(v string, fallback string) string {
+	if strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(v)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

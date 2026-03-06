@@ -48,3 +48,29 @@ func TestApplyRoutingBias_ISBN(t *testing.T) {
 		t.Fatalf("expected openlibrary/googlebooks first for ISBN query, got %s", out[0].Name())
 	}
 }
+
+func TestApplyRoutingBias_PlainTitleAuthor(t *testing.T) {
+	providers := []provider.Provider{
+		routerProvider{name: "crossref", caps: provider.Capabilities{SupportsSearch: true, SupportsDOI: true}},
+		routerProvider{name: "openlibrary", caps: provider.Capabilities{SupportsSearch: true, SupportsISBN: true}},
+		routerProvider{name: "hardcover", caps: provider.Capabilities{SupportsSearch: true, SupportsAuthorSearch: true}},
+		routerProvider{name: "googlebooks", caps: provider.Capabilities{SupportsSearch: true, SupportsAuthorSearch: true}},
+	}
+	out := ApplyRoutingBias(ClassifiedQuery{
+		Type:       QueryTypeText,
+		Normalized: "frank herbert dune",
+	}, providers)
+	if len(out) < 3 {
+		t.Fatalf("expected at least 3 providers, got %d", len(out))
+	}
+	top := map[string]struct{}{
+		out[0].Name(): {},
+		out[1].Name(): {},
+		out[2].Name(): {},
+	}
+	for _, expected := range []string{"openlibrary", "hardcover", "googlebooks"} {
+		if _, ok := top[expected]; !ok {
+			t.Fatalf("expected %s in top 3 for plain query; order=%s,%s,%s", expected, out[0].Name(), out[1].Name(), out[2].Name())
+		}
+	}
+}

@@ -256,6 +256,9 @@ func (r *defaultResolver) ResolveIdentifier(ctx context.Context, idType string, 
 		IdentifierType:  idType,
 		IdentifierValue: value,
 	}, r.registry.EnabledProviders()) {
+		if !supportsIdentifier(p, idType) {
+			continue
+		}
 		if !r.rateLimiter.Allow(p.Name()) {
 			continue
 		}
@@ -276,6 +279,18 @@ func (r *defaultResolver) ResolveIdentifier(ctx context.Context, idType string, 
 	}
 
 	return nil, fmt.Errorf("identifier not found: %s %s", idType, value)
+}
+
+func supportsIdentifier(p provider.Provider, idType string) bool {
+	caps := provider.CapabilitiesFor(p)
+	switch strings.ToUpper(strings.TrimSpace(idType)) {
+	case "DOI":
+		return caps.SupportsDOI
+	case "ISBN_10", "ISBN10", "ISBN_13", "ISBN13":
+		return caps.SupportsISBN
+	default:
+		return true
+	}
 }
 
 func (r *defaultResolver) GetWork(ctx context.Context, id string) (*model.Work, error) {

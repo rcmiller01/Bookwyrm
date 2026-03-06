@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -39,6 +40,13 @@ func main() {
 	downloadQuarantineMode := envOrDefault("DOWNLOAD_QUARANTINE_MODE", "last_resort")
 	libraryRoot := envOrDefault("LIBRARY_ROOT", "./library")
 	allowCrossDeviceMove := strings.EqualFold(envOrDefault("LIBRARY_ALLOW_CROSS_DEVICE_MOVE", "true"), "true")
+	namingTemplateEbook := envOrDefault("NAMING_TEMPLATE_EBOOK", "{Author}/{Title} ({Year})/{Title} - {Author}.{Ext}")
+	namingTemplateAudiobookSingle := envOrDefault("NAMING_TEMPLATE_AUDIOBOOK_SINGLE", "{Author}/{Title} ({Year})/{Title} - {Author}.{Ext}")
+	namingTemplateAudiobookFolder := envOrDefault("NAMING_TEMPLATE_AUDIOBOOK_FOLDER", "{Author}/{Title} ({Year})")
+	namingMaxPathLen := atoiOrDefault(envOrDefault("NAMING_MAX_PATH_LEN", "240"), 240)
+	namingReplaceColon := strings.EqualFold(envOrDefault("NAMING_REPLACE_COLON", "true"), "true")
+	keepIncomingRaw, keepIncomingSource := envOrDefaultWithSource("IMPORT_KEEP_INCOMING", "true")
+	keepIncoming := strings.EqualFold(keepIncomingRaw, "true")
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	listenAddr := envOrDefault("APP_BACKEND_ADDR", ":8090")
 
@@ -87,10 +95,16 @@ func main() {
 	importStore := initImporterStore(databaseDSN)
 	defer closeImporterStore(importStore)
 	importEngine := importer.NewEngine(importer.Config{
-		LibraryRoot:          libraryRoot,
-		AllowCrossDeviceMove: allowCrossDeviceMove,
-		MaxScanFiles:         5000,
-	}, importStore, downloadStore)
+		LibraryRoot:             libraryRoot,
+		AllowCrossDeviceMove:    allowCrossDeviceMove,
+		MaxScanFiles:            5000,
+		TemplateEbook:           namingTemplateEbook,
+		TemplateAudiobookSingle: namingTemplateAudiobookSingle,
+		TemplateAudiobookFolder: namingTemplateAudiobookFolder,
+		MaxPathLen:              namingMaxPathLen,
+		ReplaceColon:            namingReplaceColon,
+		KeepIncoming:            keepIncoming,
+	}, importStore, downloadStore, metaClient)
 	importEngine.Start(context.Background())
 
 	jobStore := store.NewInMemoryJobStore()
@@ -108,6 +122,11 @@ func main() {
 	h := api.NewHandlers(metaClient, indexerClient, store.NewInMemoryWatchlistStore())
 	h.SetJobService(jobService)
 	h.SetDownloadManager(downloadManager)
+	h.SetImportStore(importStore)
+	h.SetImportConfig(api.ImportConfig{
+		KeepIncoming: keepIncoming,
+		Source:       keepIncomingSource,
+	})
 	router := api.NewRouter(h)
 
 	log.Printf("app backend listening on %s, metadata-service=%s", listenAddr, metadataURL)
@@ -121,6 +140,13 @@ func envOrDefault(name string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envOrDefaultWithSource(name string, fallback string) (string, string) {
+	if value := os.Getenv(name); value != "" {
+		return value, "env"
+	}
+	return fallback, "default"
 }
 
 func initDownloadStore(databaseDSN string) (downloadqueue.Storage, func()) {
@@ -211,4 +237,16 @@ func closeImporterStore(store importer.Store) {
 		return
 	}
 	_ = pg.Close()
+}
+
+func atoiOrDefault(raw string, fallback int) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	var out int
+	if _, err := fmt.Sscanf(raw, "%d", &out); err != nil || out <= 0 {
+		return fallback
+	}
+	return out
 }

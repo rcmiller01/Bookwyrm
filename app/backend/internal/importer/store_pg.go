@@ -26,7 +26,7 @@ func (s *PGStore) Close() error {
 
 func (s *PGStore) CreateOrGetFromDownload(download downloadqueue.Job, targetRoot string) (Job, error) {
 	row := s.db.QueryRowContext(context.Background(), `
-		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
+		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
 		FROM import_jobs WHERE download_job_id=$1`, download.ID)
 	job, err := scanJob(row)
 	if err == nil {
@@ -37,9 +37,9 @@ func (s *PGStore) CreateOrGetFromDownload(download downloadqueue.Job, targetRoot
 	namingRaw, _ := json.Marshal(naming)
 	decisionRaw, _ := json.Marshal(decision)
 	insert := s.db.QueryRowContext(context.Background(), `
-		INSERT INTO import_jobs(download_job_id,work_id,edition_id,source_path,target_root,status,attempt_count,max_attempts,naming_result_json,decision_json,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,'queued',0,3,$6,$7,NOW(),NOW())
-		RETURNING id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at`,
+		INSERT INTO import_jobs(download_job_id,work_id,edition_id,source_path,target_root,status,attempt_count,max_attempts,rename_template,naming_result_json,decision_json,created_at,updated_at)
+		VALUES($1,$2,$3,$4,$5,'queued',0,3,'',$6,$7,NOW(),NOW())
+		RETURNING id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at`,
 		download.ID, download.WorkID, download.EditionID, download.OutputPath, targetRoot, namingRaw, decisionRaw,
 	)
 	return scanJob(insert)
@@ -52,7 +52,7 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 	}
 	defer tx.Rollback()
 	row := tx.QueryRowContext(context.Background(), `
-		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
+		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
 		FROM import_jobs
 		WHERE status='queued'
 		ORDER BY created_at ASC
@@ -84,7 +84,7 @@ func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, er
 
 func (s *PGStore) GetJob(id int64) (Job, error) {
 	row := s.db.QueryRowContext(context.Background(), `
-		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
+		SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
 		FROM import_jobs WHERE id=$1`, id)
 	return scanJob(row)
 }
@@ -98,13 +98,13 @@ func (s *PGStore) ListJobs(filter JobFilter) []Job {
 	var err error
 	if filter.Status == "" {
 		rows, err = s.db.QueryContext(context.Background(), `
-			SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
+			SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
 			FROM import_jobs
 			ORDER BY created_at DESC
 			LIMIT $1`, limit)
 	} else {
 		rows, err = s.db.QueryContext(context.Background(), `
-			SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
+			SELECT id,download_job_id,COALESCE(work_id,''),COALESCE(edition_id,''),source_path,target_root,COALESCE(target_path,''),status,attempt_count,max_attempts,COALESCE(rename_template,''),naming_result_json,decision_json,COALESCE(last_error,''),created_at,updated_at
 			FROM import_jobs
 			WHERE status=$1
 			ORDER BY created_at DESC
@@ -141,6 +141,22 @@ func (s *PGStore) MarkImported(id int64, targetPath string, naming map[string]an
 	return nil
 }
 
+func (s *PGStore) MarkNeedsReview(id int64, reason string, naming map[string]any, decision map[string]any) error {
+	namingRaw, _ := json.Marshal(naming)
+	decisionRaw, _ := json.Marshal(decision)
+	tag, err := s.db.ExecContext(context.Background(), `
+		UPDATE import_jobs
+		SET status='needs_review',naming_result_json=$3,decision_json=$4,last_error=$2,updated_at=NOW()
+		WHERE id=$1`, id, reason, namingRaw, decisionRaw)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *PGStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 	status := "queued"
 	if terminal {
@@ -159,6 +175,20 @@ func (s *PGStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 
 func (s *PGStore) Retry(id int64) error {
 	tag, err := s.db.ExecContext(context.Background(), `UPDATE import_jobs SET status='queued',last_error='',updated_at=NOW() WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *PGStore) Approve(id int64, workID string, editionID string, templateOverride string) error {
+	tag, err := s.db.ExecContext(context.Background(), `
+		UPDATE import_jobs
+		SET work_id=$2,edition_id=$3,rename_template=CASE WHEN $4='' THEN rename_template ELSE $4 END,status='queued',last_error='',updated_at=NOW()
+		WHERE id=$1`, id, workID, editionID, templateOverride)
 	if err != nil {
 		return err
 	}
@@ -248,6 +278,27 @@ func (s *PGStore) ListLibraryItems(workID string, limit int) []LibraryItem {
 	return out
 }
 
+func (s *PGStore) CountJobsByStatus() map[JobStatus]int {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT status, COUNT(*)
+		FROM import_jobs
+		GROUP BY status`)
+	if err != nil {
+		return map[JobStatus]int{}
+	}
+	defer rows.Close()
+	out := map[JobStatus]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if scanErr := rows.Scan(&status, &count); scanErr != nil {
+			continue
+		}
+		out[JobStatus(status)] = count
+	}
+	return out
+}
+
 type rowScanner interface {
 	Scan(dest ...any) error
 }
@@ -267,6 +318,7 @@ func scanJob(row rowScanner) (Job, error) {
 		&status,
 		&job.AttemptCount,
 		&job.MaxAttempts,
+		&job.RenameTemplate,
 		&namingRaw,
 		&decisionRaw,
 		&job.LastError,

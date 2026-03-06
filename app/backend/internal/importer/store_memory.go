@@ -41,18 +41,19 @@ func (s *MemoryStore) CreateOrGetFromDownload(download downloadqueue.Job, target
 	}
 	now := time.Now().UTC()
 	job := Job{
-		ID:            s.nextJobID,
-		DownloadJobID: download.ID,
-		WorkID:        download.WorkID,
-		EditionID:     download.EditionID,
-		SourcePath:    download.OutputPath,
-		TargetRoot:    targetRoot,
-		Status:        JobStatusQueued,
-		MaxAttempts:   3,
-		NamingResult:  map[string]any{},
-		Decision:      map[string]any{},
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:             s.nextJobID,
+		DownloadJobID:  download.ID,
+		WorkID:         download.WorkID,
+		EditionID:      download.EditionID,
+		SourcePath:     download.OutputPath,
+		TargetRoot:     targetRoot,
+		Status:         JobStatusQueued,
+		MaxAttempts:    3,
+		RenameTemplate: "",
+		NamingResult:   map[string]any{},
+		Decision:       map[string]any{},
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	s.nextJobID++
 	s.jobsByID[job.ID] = job
@@ -137,6 +138,22 @@ func (s *MemoryStore) MarkImported(id int64, targetPath string, naming map[strin
 	return nil
 }
 
+func (s *MemoryStore) MarkNeedsReview(id int64, reason string, naming map[string]any, decision map[string]any) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.jobsByID[id]
+	if !ok {
+		return ErrNotFound
+	}
+	job.Status = JobStatusNeedsReview
+	job.LastError = reason
+	job.NamingResult = cloneMap(naming)
+	job.Decision = cloneMap(decision)
+	job.UpdatedAt = time.Now().UTC()
+	s.jobsByID[id] = job
+	return nil
+}
+
 func (s *MemoryStore) MarkFailed(id int64, errMsg string, terminal bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -161,6 +178,25 @@ func (s *MemoryStore) Retry(id int64) error {
 	job, ok := s.jobsByID[id]
 	if !ok {
 		return ErrNotFound
+	}
+	job.Status = JobStatusQueued
+	job.LastError = ""
+	job.UpdatedAt = time.Now().UTC()
+	s.jobsByID[id] = job
+	return nil
+}
+
+func (s *MemoryStore) Approve(id int64, workID string, editionID string, templateOverride string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.jobsByID[id]
+	if !ok {
+		return ErrNotFound
+	}
+	job.WorkID = workID
+	job.EditionID = editionID
+	if templateOverride != "" {
+		job.RenameTemplate = templateOverride
 	}
 	job.Status = JobStatusQueued
 	job.LastError = ""
@@ -240,6 +276,16 @@ func (s *MemoryStore) ListLibraryItems(workID string, limit int) []LibraryItem {
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	if len(out) > limit {
 		out = out[:limit]
+	}
+	return out
+}
+
+func (s *MemoryStore) CountJobsByStatus() map[JobStatus]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := map[JobStatus]int{}
+	for _, job := range s.jobsByID {
+		out[job.Status]++
 	}
 	return out
 }

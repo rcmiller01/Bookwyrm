@@ -27,17 +27,21 @@ func (c *mockCache) Get(key string) (interface{}, bool) {
 	return v, ok
 }
 func (c *mockCache) Set(key string, value interface{}, _ time.Duration) { c.data[key] = value }
-func (c *mockCache) Delete(key string)                                   { delete(c.data, key) }
+func (c *mockCache) Delete(key string)                                  { delete(c.data, key) }
 
 // ============================================================
 // Mock: provider
 // ============================================================
 
 type mockProvider struct {
-	name    string
-	results []model.Work
-	err     error
-	calls   int // incremented on each SearchWorks call
+	name           string
+	results        []model.Work
+	err            error
+	calls          int // incremented on each SearchWorks call
+	resolveCalls   int
+	resolveEdition *model.Edition
+	resolveErr     error
+	caps           provider.Capabilities
 }
 
 func (p *mockProvider) Name() string { return p.name }
@@ -50,8 +54,10 @@ func (p *mockProvider) GetEditions(_ context.Context, _ string) ([]model.Edition
 	return nil, nil
 }
 func (p *mockProvider) ResolveIdentifier(_ context.Context, _, _ string) (*model.Edition, error) {
-	return nil, nil
+	p.resolveCalls++
+	return p.resolveEdition, p.resolveErr
 }
+func (p *mockProvider) Capabilities() provider.Capabilities { return p.caps }
 
 // ============================================================
 // Mock stores
@@ -83,7 +89,7 @@ func (s *mockWorkStore) InsertWork(_ context.Context, w model.Work) error {
 	s.byID[w.ID] = &w
 	return nil
 }
-func (s *mockWorkStore) UpdateWork(_ context.Context, _ model.Work) error              { return nil }
+func (s *mockWorkStore) UpdateWork(_ context.Context, _ model.Work) error { return nil }
 func (s *mockWorkStore) GetWorkByFingerprint(_ context.Context, _ string) (*model.Work, error) {
 	return nil, errors.New("not found")
 }
@@ -135,7 +141,7 @@ func (s *noopStatusStore) UpdateStatus(_ context.Context, _ string, _ string, _ 
 	return nil
 }
 func (s *noopStatusStore) RecordSuccess(_ context.Context, _ string, _ int64) error { return nil }
-func (s *noopStatusStore) RecordFailure(_ context.Context, _ string) error           { return nil }
+func (s *noopStatusStore) RecordFailure(_ context.Context, _ string) error          { return nil }
 
 // ============================================================
 // Helpers
@@ -359,5 +365,49 @@ func TestSearchWorks_ResultsCachedAfterProviderQuery(t *testing.T) {
 	if prov.calls != firstCallCount {
 		t.Errorf("second identical query should be served from cache; provider calls went from %d to %d",
 			firstCallCount, prov.calls)
+	}
+}
+
+func TestResolveIdentifier_SkipsUnsupportedProviders(t *testing.T) {
+	ws := newMockWorkStore(nil)
+	unsupported := &mockProvider{
+		name: "no-doi",
+		caps: provider.Capabilities{
+			SupportsSearch: true,
+			SupportsISBN:   true,
+			SupportsDOI:    false,
+		},
+	}
+	supported := &mockProvider{
+		name: "yes-doi",
+		caps: provider.Capabilities{
+			SupportsSearch: true,
+			SupportsISBN:   false,
+			SupportsDOI:    true,
+		},
+		resolveEdition: &model.Edition{
+			ID: "ed-1",
+			Identifiers: []model.Identifier{
+				{Type: "DOI", Value: "10.1234/example"},
+			},
+		},
+	}
+	reg := provider.NewRegistry()
+	reg.RegisterWithConfig(unsupported, 10, true)
+	reg.RegisterWithConfig(supported, 20, true)
+
+	res := buildResolver(ws, reg, provider.NewRateLimiter())
+	edition, err := res.ResolveIdentifier(context.Background(), "DOI", "10.1234/example")
+	if err != nil {
+		t.Fatalf("resolve identifier failed: %v", err)
+	}
+	if edition == nil || edition.ID != "ed-1" {
+		t.Fatalf("expected resolved edition from DOI-capable provider")
+	}
+	if unsupported.resolveCalls != 0 {
+		t.Fatalf("expected DOI-unsupported provider to be skipped, got %d calls", unsupported.resolveCalls)
+	}
+	if supported.resolveCalls != 1 {
+		t.Fatalf("expected DOI-capable provider to be called once, got %d", supported.resolveCalls)
 	}
 }

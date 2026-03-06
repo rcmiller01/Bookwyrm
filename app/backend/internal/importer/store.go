@@ -15,12 +15,15 @@ type Store interface {
 	GetJob(id int64) (Job, error)
 	ListJobs(filter JobFilter) []Job
 	MarkImported(id int64, targetPath string, naming map[string]any, decision map[string]any) error
+	MarkNeedsReview(id int64, reason string, naming map[string]any, decision map[string]any) error
 	MarkFailed(id int64, errMsg string, terminal bool) error
 	Retry(id int64) error
+	Approve(id int64, workID string, editionID string, templateOverride string) error
 	Skip(id int64, reason string) error
 	AddEvent(importJobID int64, eventType string, message string, payload map[string]any) error
 	ListEvents(importJobID int64) []Event
 
 	UpsertLibraryItem(item LibraryItem) (LibraryItem, error)
 	ListLibraryItems(workID string, limit int) []LibraryItem
+	CountJobsByStatus() map[JobStatus]int
 }
