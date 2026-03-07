@@ -1,37 +1,34 @@
-# Windows Installer
+# Windows Zip Distribution
 
-This document defines the intended installer behavior for native Windows packaging.
+Bookwyrm alpha distributions are zip-only to avoid unsigned installer confusion.
 
-## Installer responsibilities
+## Artifact
 
-- Place binaries under `C:\ProgramData\Bookwyrm\bin\`
-- Place writable config under `C:\ProgramData\Bookwyrm\config\`
-- Place logs under `C:\ProgramData\Bookwyrm\logs\`
-- Optionally register Bookwyrm as a Windows service
-- Optionally open `http://localhost:8090` after install
-- Optional install script: `launcher/packaging/windows/bookwyrm.iss` (Inno Setup)
-- Alpha artifact naming:
-  - `bookwyrm-<version>-setup.exe`
-  - `bookwyrm-<version>-windows.zip`
+- `bookwyrm-<version>-windows.zip`
 
-## Installer prompts (recommended)
+## Install from zip
 
-- install location (default `C:\ProgramData\Bookwyrm`)
-- install as Windows service (recommended)
-- start service immediately
-- library root path
-- whether to open browser after install
+1. Extract zip to a stable folder, for example `C:\ProgramData\Bookwyrm`.
+2. Ensure these subfolders exist after extraction:
+   - `bin\`
+   - `config\`
+   - `logs\`
+   - `data\`
+3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml` for your environment.
+4. Start Bookwyrm:
+
+```powershell
+cd C:\ProgramData\Bookwyrm
+.\bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm
+```
+
+5. Open `http://localhost:8090` and complete setup.
 
 ## Upgrade behavior
 
-- Replace only `bin\`
-- Preserve `config\` and `data\`
-- Never overwrite secrets silently
-
-## Uninstall behavior
-
-- Remove binaries
-- Prompt whether to keep `config\`, `logs\`, and data
+- Replace `bin\` with files from the new zip.
+- Keep `config\`, `data\`, and `logs\`.
+- Do not overwrite secrets unless intentionally rotating values.
 
 ## Post-install validation
 
