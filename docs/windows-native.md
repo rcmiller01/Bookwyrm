@@ -4,11 +4,16 @@ This guide describes running Bookwyrm natively on Windows.
 
 ## Current beta shape
 
+- `bookwyrm-launcher.exe`
 - `metadata-service.exe`
 - `indexer-service.exe`
 - `backend.exe`
 
-Use a launcher/service wrapper when available. Until then, start all three services with consistent env/config.
+Use launcher as the single entrypoint:
+
+```powershell
+bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm
+```
 
 ## Recommended paths
 
@@ -53,3 +58,4 @@ Search backend logs for `startup warning:` entries.
 
 - Use `Status -> Download Support Bundle`.
 - Keep logs in a stable folder and set `BOOKWYRM_LOG_DIR` for bundle pickup.
+- Status page now has an `Open Logs Folder` action.

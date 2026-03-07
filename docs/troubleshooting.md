@@ -10,6 +10,7 @@
    - `Retry Failed Downloads`
    - `Retry Failed Imports`
    - `Run Cleanup`
+   - `Open Logs Folder`
 5. Download a support bundle and attach it to bug reports.
 
 ## Common issues

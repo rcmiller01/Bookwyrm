@@ -12,6 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `GET /api/v1/system/migration-status` endpoint for runtime migration readiness (ok/pending/failed).
 - `GET /api/v1/system/dependencies` endpoint with a single functional dependency summary (`can_function_now`).
 - Startup diagnostics now emit explicit `startup warning:` log lines for missing/unreachable metadata/indexer/DB/download-client/indexer-backend dependencies.
+- New `launcher` module with `bookwyrm-launcher`:
+  - supervises metadata/indexer/backend child processes
+  - waits for health checks before reporting startup success
+  - restarts crashed services with capped backoff policy
+  - supports Windows service lifecycle (`install-service`, `start-service`, `stop-service`, `uninstall-service`)
+  - writes `launcher.log` and per-service logs with rotation
+  - opens browser on first successful startup using persisted first-run flag
+- Added `GET /api/v1/system/logs-location` endpoint and Status page `Open Logs Folder` action.
+- Added Inno Setup packaging scaffold: `launcher/packaging/windows/bookwyrm.iss`.
 - System remediation actions:
   - `POST /api/v1/system/actions/retry-failed-downloads`
   - `POST /api/v1/system/actions/retry-failed-imports`

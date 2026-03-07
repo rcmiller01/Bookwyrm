@@ -8,6 +8,14 @@ Use this mode when Bookwyrm services run natively and Postgres runs in Docker De
 - Native service startup behavior for Bookwyrm
 - Lower operational burden than bundled database management
 
+## Recommended startup
+
+Use launcher as single process entrypoint:
+
+```powershell
+bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm
+```
+
 ## Connection examples
 
 ```env

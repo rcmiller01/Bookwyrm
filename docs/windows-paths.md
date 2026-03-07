@@ -6,6 +6,8 @@
 - Incoming staging: `D:\Media\Books\_incoming`
 - Trash: `D:\Media\Books\_trash`
 - Completed downloads: `D:\Downloads\Completed`
+- Launcher home: `C:\ProgramData\Bookwyrm`
+- Launcher first-run state: `C:\ProgramData\Bookwyrm\data\first_run_complete.json`
 
 ## Path rules
 
@@ -20,4 +22,4 @@
 - Completed download path exists.
 - Import can move/copy files from completed path to library root.
 - Spaces in paths are tested before enabling automation.
-
+- Logs should remain under `C:\ProgramData\Bookwyrm\logs` for support bundle capture.

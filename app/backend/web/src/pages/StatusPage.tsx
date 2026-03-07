@@ -50,6 +50,12 @@ type ActionResponse = {
   failed?: number
 }
 
+type LogsLocationResponse = {
+  log_dir: string
+  exists: boolean
+  file_uri: string
+}
+
 function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
     <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
@@ -107,6 +113,11 @@ export function StatusPage() {
     queryFn: () => fetchJSON<DownloadClientsResponse>('/api/v1/download/clients'),
     refetchInterval: 15000
   })
+  const logsLocation = useQuery({
+    queryKey: ['status', 'logs-location'],
+    queryFn: () => fetchJSON<LogsLocationResponse>('/api/v1/system/logs-location'),
+    refetchInterval: false
+  })
 
   const enabledBackends = (backends.data?.backends ?? []).filter((b) => b.enabled)
   const healthyBackends = enabledBackends.filter((b) => b.tier !== 'quarantine')
@@ -158,6 +169,16 @@ export function StatusPage() {
     }
   }
 
+  function openLogsFolder() {
+    const uri = logsLocation.data?.file_uri
+    if (uri) {
+      window.open(uri, '_blank', 'noopener,noreferrer')
+      pushToast(`Logs folder: ${logsLocation.data?.log_dir}`)
+      return
+    }
+    pushToast('Logs path unavailable')
+  }
+
   return (
     <section className="space-y-4">
       <header>
@@ -190,6 +211,12 @@ export function StatusPage() {
             onClick={downloadSupportBundle}
           >
             Download Support Bundle
+          </button>
+          <button
+            className="rounded border border-sky-700 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-900/20"
+            onClick={openLogsFolder}
+          >
+            Open Logs Folder
           </button>
           <button
             className="rounded border border-emerald-700 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-900/20 disabled:opacity-60"
@@ -241,6 +268,9 @@ export function StatusPage() {
             Rerun Enrichment
           </button>
         </div>
+        {logsLocation.data ? (
+          <p className="mt-2 text-xs text-slate-400">Logs path: {logsLocation.data.log_dir}</p>
+        ) : null}
       </div>
 
       {systemStatus.data?.version ? (
