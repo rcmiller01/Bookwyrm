@@ -68,13 +68,19 @@ jobs:
         run: .\scripts\release\build-alpha-windows.ps1 -Version "${{ steps.version.outputs.value }}"
 
       - name: Sign installer
-        if: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 != '' && secrets.WINDOWS_SIGNING_CERT_PASSWORD != '' }}
+        id: sign_installer
         shell: pwsh
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
           TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:CERT_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:CERT_PASSWORD)) {
+            Write-Warning "Installer signing skipped. Set WINDOWS_SIGNING_CERT_BASE64 and WINDOWS_SIGNING_CERT_PASSWORD to enable Authenticode signing."
+            "signed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
           $version = "${{ steps.version.outputs.value }}"
           $setupExe = Resolve-Path "dist/release/bookwyrm-$version-setup.exe"
           $pfxPath = Join-Path $env:RUNNER_TEMP "bookwyrm-signing.pfx"
@@ -90,9 +96,10 @@ jobs:
           $timestamp = if ([string]::IsNullOrWhiteSpace($env:TIMESTAMP_URL)) { "http://timestamp.digicert.com" } else { $env:TIMESTAMP_URL }
           & $signtool sign /f $pfxPath /p $env:CERT_PASSWORD /fd SHA256 /td SHA256 /tr $timestamp /d "Bookwyrm" /v $setupExe
           if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+          "signed=true" >> $env:GITHUB_OUTPUT
 
       - name: Verify installer signature
-        if: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 != '' && secrets.WINDOWS_SIGNING_CERT_PASSWORD != '' }}
+        if: ${{ steps.sign_installer.outputs.signed == 'true' }}
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.value }}"
@@ -102,11 +109,6 @@ jobs:
             Select-Object -First 1 -ExpandProperty FullName
           & $signtool verify /pa /v $setupExe
           if ($LASTEXITCODE -ne 0) { throw "signtool verify failed with exit code $LASTEXITCODE" }
-
-      - name: Signing not configured
-        if: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 == '' || secrets.WINDOWS_SIGNING_CERT_PASSWORD == '' }}
-        shell: pwsh
-        run: Write-Warning "Installer signing skipped. Set WINDOWS_SIGNING_CERT_BASE64 and WINDOWS_SIGNING_CERT_PASSWORD to enable Authenticode signing."
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
