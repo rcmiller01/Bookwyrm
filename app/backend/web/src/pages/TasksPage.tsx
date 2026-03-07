@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ToastProvider'
 import { fetchJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type JobRecord = {
   id: string
@@ -33,7 +34,7 @@ export function TasksPage() {
       pushToast('Task retried')
       await queryClient.invalidateQueries({ queryKey: ['system', 'tasks'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const cancelMutation = useMutation({
@@ -44,7 +45,7 @@ export function TasksPage() {
       pushToast('Task canceled')
       await queryClient.invalidateQueries({ queryKey: ['system', 'tasks'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const rows = useMemo(() => {

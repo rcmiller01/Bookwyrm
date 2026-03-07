@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     host: true,
@@ -11,5 +11,12 @@ export default defineConfig({
       '/ui-api': 'http://localhost:8090',
       '/metrics': 'http://localhost:8090'
     }
-  }
-})
+  },
+  build: {
+    rollupOptions: {
+      plugins: mode === 'analyze'
+        ? [import('rollup-plugin-visualizer').then(m => m.visualizer({ open: true, filename: 'bundle-stats.html' }))]
+        : [],
+    },
+  },
+}))

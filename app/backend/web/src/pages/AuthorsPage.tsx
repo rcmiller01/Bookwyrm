@@ -11,6 +11,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 import { getPresetsForPage } from '../presets/views'
 
 type LibraryItemsResponse = { items: Array<{ work_id: string }> }
@@ -128,10 +129,10 @@ export function AuthorsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'authors'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
-  const wantedByID = new Map((wantedAuthorsQuery.data?.items ?? []).map((item) => [item.author_id, item]))
+  const wantedByID = useMemo(() => new Map((wantedAuthorsQuery.data?.items ?? []).map((item) => [item.author_id, item])), [wantedAuthorsQuery.data?.items])
   const defaultProfileID = profilesQuery.data?.default_profile_id ?? ''
 
   const rows = useMemo<AuthorRow[]>(() => {

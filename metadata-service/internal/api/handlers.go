@@ -16,6 +16,7 @@ import (
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
+	"metadata-service/internal/version"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -39,6 +40,7 @@ type Handlers struct {
 	enrichmentWorkers int
 	policySource      string
 	policyMode        string
+	dbPing            func(ctx context.Context) error
 }
 
 type recommendationService interface {
@@ -90,6 +92,53 @@ func NewHandlers(
 		policySource:      policySource,
 		policyMode:        policyMode,
 	}
+}
+
+func (h *Handlers) SetDBPing(fn func(ctx context.Context) error) {
+	h.dbPing = fn
+}
+
+func (h *Handlers) Healthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":  "ok",
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+	})
+}
+
+func (h *Handlers) Readyz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	checks := map[string]string{}
+	allOK := true
+
+	if h.dbPing != nil {
+		if err := h.dbPing(ctx); err != nil {
+			checks["database"] = "error: " + err.Error()
+			allOK = false
+		} else {
+			checks["database"] = "ok"
+		}
+	}
+
+	status := "ok"
+	code := http.StatusOK
+	if !allOK {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":  status,
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+		"checks":  checks,
+	})
 }
 
 func splitCSVParam(value string) []string {

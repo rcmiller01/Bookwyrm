@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type ProviderInfo = {
   name: string
@@ -49,7 +50,7 @@ export function MetadataPage() {
       await queryClient.invalidateQueries({ queryKey: ['settings', 'metadata', 'providers'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard', 'metadata-reliability'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const rows = useMemo(() => {

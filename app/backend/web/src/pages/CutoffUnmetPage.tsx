@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { FilterBar } from '../components/FilterBar'
@@ -10,6 +10,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 import { getPresetsForPage } from '../presets/views'
 
 type WantedWork = {
@@ -157,8 +158,35 @@ export function CutoffUnmetPage() {
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
     },
     onSuccess: () => pushToast('Upgrade search enqueued'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
+
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const bulkCancelRef = useRef(false)
+
+  const runBulkSearch = useCallback(async (targets: Row[]) => {
+    if (targets.length === 0) {
+      pushToast('No unmet items to search')
+      return
+    }
+    setBulkRunning(true)
+    bulkCancelRef.current = false
+    let enqueued = 0
+    for (const row of targets) {
+      if (bulkCancelRef.current) break
+      try {
+        await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(row.workID)}`, { title: row.title })
+        enqueued++
+      } catch {
+        // individual failures are tolerated; continue
+      }
+      // small delay to avoid hammering the backend
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    setBulkRunning(false)
+    pushToast(`Enqueued upgrade searches for ${enqueued} of ${targets.length} works`)
+  }, [pushToast])
 
   const rows = useMemo<Row[]>(() => {
     const profiles = profilesQuery.data?.items ?? []
@@ -278,7 +306,45 @@ export function CutoffUnmetPage() {
             return ok
           }}
         />
+        <button
+          className="rounded border border-amber-700 px-2 py-1.5 text-sm text-amber-300 disabled:opacity-40"
+          disabled={bulkRunning || filteredRows.length === 0}
+          onClick={() => setBulkConfirmOpen(true)}
+        >
+          {bulkRunning ? 'Searching...' : `Search All Unmet (${filteredRows.length})`}
+        </button>
+        {bulkRunning && (
+          <button
+            className="rounded border border-red-700 px-2 py-1.5 text-sm text-red-300"
+            onClick={() => { bulkCancelRef.current = true }}
+          >
+            Cancel
+          </button>
+        )}
       </FilterBar>
+
+      {bulkConfirmOpen && (
+        <div className="rounded border border-amber-900/80 bg-amber-950/40 p-3 text-sm text-amber-200">
+          <p>
+            This will enqueue upgrade searches for <strong>{filteredRows.length}</strong> works matching the current filters.
+            The indexer rate-limits enqueues so large batches are safe.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              className="rounded border border-emerald-700 px-3 py-1 text-sm text-emerald-300"
+              onClick={() => { setBulkConfirmOpen(false); runBulkSearch(filteredRows) }}
+            >
+              Confirm
+            </button>
+            <button
+              className="rounded border border-slate-700 px-3 py-1 text-sm text-slate-300"
+              onClick={() => setBulkConfirmOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <VirtualizedList
         rows={filteredRows}

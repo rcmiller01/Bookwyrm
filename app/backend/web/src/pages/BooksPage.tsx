@@ -11,6 +11,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 import { getPresetsForPage } from '../presets/views'
 
 type LibraryItem = {
@@ -183,7 +184,7 @@ export function BooksPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const searchMutation = useMutation({
@@ -191,10 +192,10 @@ export function BooksPage() {
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
     },
     onSuccess: () => pushToast('Search request enqueued'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
-  const monitoredByWork = new Map((wantedWorksQuery.data?.items ?? []).map((r) => [r.work_id, r]))
+  const monitoredByWork = useMemo(() => new Map((wantedWorksQuery.data?.items ?? []).map((r) => [r.work_id, r])), [wantedWorksQuery.data?.items])
   const defaultProfileID = profilesQuery.data?.default_profile_id ?? ''
 
   const rows = useMemo<BookRow[]>(() => {

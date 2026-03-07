@@ -1,6 +1,13 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { AlertBanner } from '../components/AlertBanner'
 import { fetchJSON } from '../lib/api'
+
+type SystemStatusResponse = {
+  version?: string
+  commit?: string
+}
 
 type ImportStatsResponse = {
   library_root?: string
@@ -30,6 +37,7 @@ type MetadataReliabilityResponse = { providers: MetadataReliabilityProvider[] }
 type IndexerBackend = {
   id: string
   name: string
+  backend_type?: string
   enabled: boolean
   reliability_score: number
   tier: string
@@ -46,19 +54,30 @@ function StatCard({ label, value, subtitle }: { label: string; value: string | n
   )
 }
 
-function ChecklistItem({ label, ok, detail }: { label: string; ok: boolean; detail?: string }) {
-  return (
-    <div className="flex items-start justify-between gap-2 rounded border border-slate-800 bg-slate-900/40 px-3 py-2">
+function ChecklistItem({ label, ok, detail, tip, to }: { label: string; ok: boolean; detail?: string; tip?: string; to?: string }) {
+  const inner = (
+    <div className="flex items-start justify-between gap-2 rounded border border-slate-800 bg-slate-900/40 px-3 py-2 transition-colors hover:bg-slate-800/60">
       <div>
         <p className="text-sm text-slate-100">{label}</p>
         {detail ? <p className="text-xs text-slate-400">{detail}</p> : null}
+        {!ok && tip ? <p className="mt-0.5 text-xs text-sky-400/80">{tip}</p> : null}
       </div>
       <span className={ok ? 'text-xs font-medium text-emerald-400' : 'text-xs font-medium text-amber-400'}>{ok ? 'Ready' : 'Missing'}</span>
     </div>
   )
+  if (to) {
+    return <Link to={to}>{inner}</Link>
+  }
+  return inner
 }
 
 export function DashboardPage() {
+  const systemStatusQuery = useQuery({
+    queryKey: ['dashboard', 'system-status'],
+    queryFn: () => fetchJSON<SystemStatusResponse>('/api/v1/system/status'),
+    refetchInterval: 60000
+  })
+
   const importStatsQuery = useQuery({
     queryKey: ['dashboard', 'import-stats'],
     queryFn: () => fetchJSON<ImportStatsResponse>('/api/v1/import/stats'),
@@ -112,6 +131,16 @@ export function DashboardPage() {
   const downloadHealthy = enabledDownloadClients.filter((c) => c.tier !== 'quarantine').length
   const downloadTotal = enabledDownloadClients.length
 
+  const prowlarrConnected = (indexerBackendsQuery.data?.backends ?? []).some((b) => b.backend_type === 'prowlarr' && b.enabled)
+
+  const checklistItems = [
+    Boolean(importStatsQuery.data?.library_root_configured),
+    enabledIndexerBackends.length > 0,
+    enabledDownloadClients.length > 0,
+    prowlarrConnected
+  ]
+  const checklistIncomplete = checklistItems.filter((ok) => !ok).length
+
   const loading =
     importStatsQuery.isLoading ||
     downloadJobsQuery.isLoading ||
@@ -127,7 +156,18 @@ export function DashboardPage() {
         <p className="text-sm text-slate-400">Setup checklist, current activity, and subsystem health.</p>
       </header>
 
+      {!loading && checklistIncomplete >= 2 ? (
+        <div className="rounded-lg border border-sky-800/60 bg-sky-950/30 p-4">
+          <h3 className="text-lg font-semibold text-sky-200">Welcome to Bookwyrm</h3>
+          <p className="mt-1 text-sm text-sky-300/80">
+            Complete the setup checklist below to get started. {checklistIncomplete} item{checklistIncomplete > 1 ? 's' : ''} remaining.
+          </p>
+        </div>
+      ) : null}
+
       {loading ? <p className="text-sm text-slate-400">Loading dashboard data...</p> : null}
+
+      <AlertBanner />
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard label="Downloads In Progress" value={downloadsInProgress} subtitle="queued + active download states" />
@@ -143,16 +183,29 @@ export function DashboardPage() {
               label="Library root configured"
               ok={Boolean(importStatsQuery.data?.library_root_configured)}
               detail={importStatsQuery.data?.library_root || 'Set LIBRARY_ROOT in backend environment'}
+              tip="Set the LIBRARY_ROOT env variable to your book directory path"
+              to="/settings/media-management"
+            />
+            <ChecklistItem
+              label="Prowlarr connected"
+              ok={prowlarrConnected}
+              detail={prowlarrConnected ? 'Prowlarr backend enabled' : 'No Prowlarr backend detected'}
+              tip="Set PROWLARR_BASE_URL and PROWLARR_API_KEY on the indexer service"
+              to="/settings/indexers"
             />
             <ChecklistItem
               label="Indexer backend enabled"
               ok={enabledIndexerBackends.length > 0}
               detail={`${enabledIndexerBackends.length} enabled backend(s)`}
+              tip="Enable at least one search backend in indexer settings"
+              to="/settings/indexers"
             />
             <ChecklistItem
               label="Download client enabled"
               ok={enabledDownloadClients.length > 0}
               detail={`${enabledDownloadClients.length} enabled client(s)`}
+              tip="Configure SABnzbd, qBittorrent, or NZBGet in download client settings"
+              to="/settings/download-clients"
             />
           </div>
         </div>
@@ -176,10 +229,20 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {importStatsQuery.isError || downloadJobsQuery.isError || importNeedsReviewQuery.isError || downloadClientsQuery.isError || metadataReliabilityQuery.isError || indexerBackendsQuery.isError ? (
-        <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">
-          One or more dashboard sources failed to load. Verify backend, metadata, and indexer services are reachable.
-        </div>
+      {importStatsQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load import stats. Check backend API connectivity.</div> : null}
+      {downloadJobsQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load download jobs. Check backend API connectivity.</div> : null}
+      {importNeedsReviewQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load import review queue. Check backend API connectivity.</div> : null}
+      {downloadClientsQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load download clients. Check backend API connectivity.</div> : null}
+      {metadataReliabilityQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load metadata reliability. Verify METADATA_SERVICE_URL is correct.</div> : null}
+      {indexerBackendsQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load indexer backends. Verify INDEXER_SERVICE_URL is correct.</div> : null}
+
+      {systemStatusQuery.data?.version ? (
+        <p className="text-center text-xs text-slate-500">
+          Bookwyrm {systemStatusQuery.data.version}
+          {systemStatusQuery.data.commit && systemStatusQuery.data.commit !== 'unknown'
+            ? ` (${systemStatusQuery.data.commit.substring(0, 7)})`
+            : ''}
+        </p>
       ) : null}
     </section>
   )

@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type BackendRecord = {
   id: string
@@ -59,7 +60,7 @@ export function IndexersPage() {
       await queryClient.invalidateQueries({ queryKey: ['settings', 'indexers', 'backends'] })
       await queryClient.invalidateQueries({ queryKey: ['indexers', 'backends'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const rows = useMemo(() => {

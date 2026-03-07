@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"app-backend/internal/api"
@@ -19,11 +21,14 @@ import (
 	"app-backend/internal/integration/metadata"
 	"app-backend/internal/jobs"
 	"app-backend/internal/store"
+	"app-backend/internal/version"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	log.Printf("bookwyrm app-backend version=%s commit=%s built=%s", version.Version, version.Commit, version.BuildDate)
+
 	metadataURL := envOrDefault("METADATA_SERVICE_URL", "http://localhost:8080")
 	metadataAPIKey := os.Getenv("METADATA_SERVICE_API_KEY")
 	indexerURL := envOrDefault("INDEXER_SERVICE_URL", "http://localhost:8091")
@@ -97,11 +102,14 @@ func main() {
 			Timeout:  10 * time.Second,
 		}))
 	}
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+
 	downloadStore, closeDownloadStore := initDownloadStore(databaseDSN)
 	defer closeDownloadStore()
 	seedDownloadClients(downloadStore, qbitURL != "", sabURL != "", nzbgetURL != "")
 	downloadManager := downloadqueue.NewManager(downloadStore, downloadService, indexerClient, downloadQuarantineMode)
-	downloadManager.Start(context.Background())
+	downloadManager.Start(rootCtx)
 	importStore := initImporterStore(databaseDSN)
 	defer closeImporterStore(importStore)
 	importEngine := importer.NewEngine(importer.Config{
@@ -117,7 +125,7 @@ func main() {
 		KeepIncomingDays:        keepIncomingDays,
 		KeepTrashDays:           keepTrashDays,
 	}, importStore, downloadStore, metaClient)
-	importEngine.Start(context.Background())
+	importEngine.Start(rootCtx)
 
 	jobStore := store.NewInMemoryJobStore()
 	jobService := jobs.NewService(
@@ -129,11 +137,12 @@ func main() {
 		jobs.NewNoopHandler("import_completed"),
 		jobs.NewNoopHandler("rename_finalize"),
 	)
-	go jobService.Start(context.Background())
+	go jobService.Start(rootCtx)
 
 	h := api.NewHandlersWithDomain(metaClient, indexerClient, store.NewInMemoryWatchlistStore(), domainPack)
 	h.SetJobService(jobService)
 	h.SetDownloadManager(downloadManager)
+	h.SetDownloadService(downloadService)
 	h.SetImportStore(importStore)
 	h.SetImportEngine(importEngine)
 	h.SetImportConfig(api.ImportConfig{
@@ -141,16 +150,39 @@ func main() {
 		Source:       keepIncomingSource,
 		LibraryRoot:  libraryRoot,
 	})
+	h.SetUpstreamURLs(metadataURL, indexerURL)
+	h.SetStartupTime(time.Now())
+	h.SetLibraryRoot(libraryRoot)
 	router := api.NewRouterWithConfig(h, api.RouterConfig{
 		UIAssetsDir:          uiAssetsDir,
 		MetadataProxyBaseURL: metadataURL,
 		IndexerProxyBaseURL:  indexerURL,
 	})
 
-	log.Printf("app backend listening on %s, metadata-service=%s, domain=%s", listenAddr, metadataURL, domainPack.Name())
-	if err := http.ListenAndServe(listenAddr, router); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:         listenAddr,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	go func() {
+		log.Printf("app backend listening on %s, metadata-service=%s, domain=%s", listenAddr, metadataURL, domainPack.Name())
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("shutting down gracefully")
+	rootCancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = srv.Shutdown(shutdownCtx)
 }
 
 func envOrDefault(name string, fallback string) string {

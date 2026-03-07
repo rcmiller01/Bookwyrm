@@ -393,16 +393,57 @@ func (e *Engine) processJob(_ context.Context, job Job) error {
 				_ = os.Remove(p.SourcePath)
 				continue
 			}
-			decision["collision"] = map[string]any{
-				"target_path": p.TargetPath,
-				"reason":      "existing file differs",
+			// Check download job's upgrade_action for auto-resolution.
+			upgradeAction := "ask"
+			if dJob, dErr := e.downloadStore.GetJob(job.DownloadJobID); dErr == nil && dJob.UpgradeAction != "" {
+				upgradeAction = dJob.UpgradeAction
 			}
-			_ = e.store.MarkNeedsReview(job.ID, "target exists with different content; review required", naming, decision)
-			e.addEvent(job, "warning", "collision requires review", map[string]any{
-				"target_path": p.TargetPath,
-				"source_path": p.SourcePath,
-			})
-			return nil
+			switch upgradeAction {
+			case "replace":
+				if err := e.moveExistingToTrash(p.TargetPath); err != nil {
+					return err
+				}
+				e.addEvent(job, "auto_upgrade", "auto-replacing existing file per profile policy", map[string]any{
+					"target_path":    p.TargetPath,
+					"upgrade_action": "replace",
+				})
+				// Fall through to normal move/copy below.
+			case "keep_both":
+				newTarget := e.nextKeepBothPath(p.TargetPath)
+				if err := os.MkdirAll(filepath.Dir(newTarget), 0o755); err != nil {
+					return err
+				}
+				if err := e.moveOrCopy(p.SourcePath, newTarget); err != nil {
+					return err
+				}
+				if info, statErr := os.Stat(newTarget); statErr == nil {
+					_, _ = e.store.UpsertLibraryItem(LibraryItem{
+						WorkID:    fallback(job.WorkID, "unknown-work"),
+						EditionID: job.EditionID,
+						Path:      newTarget,
+						Format:    formatFromExt(filepath.Ext(newTarget)),
+						SizeBytes: info.Size(),
+					})
+				}
+				e.addEvent(job, "auto_upgrade", "auto-keeping both files per profile policy", map[string]any{
+					"target_path":    p.TargetPath,
+					"new_path":       newTarget,
+					"upgrade_action": "keep_both",
+				})
+				plans[i].SourcePath = newTarget
+				continue
+			default: // "ask" or unrecognized — fall through to needs_review
+				decision["collision"] = map[string]any{
+					"target_path": p.TargetPath,
+					"reason":      "existing file differs",
+				}
+				_ = e.store.MarkNeedsReview(job.ID, "target exists with different content; review required", naming, decision)
+				e.addEvent(job, "warning", "collision requires review", map[string]any{
+					"target_path": p.TargetPath,
+					"source_path": p.SourcePath,
+				})
+				return nil
+			}
 		}
 		if err := os.MkdirAll(filepath.Dir(p.TargetPath), 0o755); err != nil {
 			return err

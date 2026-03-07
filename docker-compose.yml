@@ -1,0 +1,95 @@
+version: "3.8"
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bookwyrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bookwyrm}
+      POSTGRES_DB: ${POSTGRES_DB:-bookwyrm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - bookwyrm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookwyrm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  metadata-service:
+    build:
+      context: ./metadata-service
+      dockerfile: Dockerfile
+    ports:
+      - "${METADATA_PORT:-8080}:8080"
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: ${POSTGRES_USER:-bookwyrm}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-bookwyrm}
+      DATABASE_NAME: ${METADATA_DB:-bookwyrm_metadata}
+      METADATA_API_AUTH_ENABLED: ${METADATA_API_AUTH_ENABLED:-false}
+      METADATA_API_KEYS: ${METADATA_API_KEYS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  indexer-service:
+    build:
+      context: ./indexer-service
+      dockerfile: Dockerfile
+    ports:
+      - "${INDEXER_PORT:-8091}:8091"
+    environment:
+      INDEXER_SERVICE_ADDR: ":8091"
+      DATABASE_DSN: "postgres://${POSTGRES_USER:-bookwyrm}:${POSTGRES_PASSWORD:-bookwyrm}@postgres:5432/${INDEXER_DB:-bookwyrm_indexer}?sslmode=disable"
+      PROWLARR_BASE_URL: ${PROWLARR_BASE_URL:-}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
+      INDEXER_QUARANTINE_MODE: ${INDEXER_QUARANTINE_MODE:-last_resort}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app-backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8090}:8090"
+    environment:
+      APP_BACKEND_ADDR: ":8090"
+      METADATA_SERVICE_URL: "http://metadata-service:8080"
+      METADATA_SERVICE_API_KEY: ${METADATA_SERVICE_API_KEY:-}
+      INDEXER_SERVICE_URL: "http://indexer-service:8091"
+      INDEXER_SERVICE_API_KEY: ${INDEXER_SERVICE_API_KEY:-}
+      DATABASE_DSN: "postgres://${POSTGRES_USER:-bookwyrm}:${POSTGRES_PASSWORD:-bookwyrm}@postgres:5432/${BACKEND_DB:-bookwyrm_backend}?sslmode=disable"
+      LIBRARY_ROOT: ${LIBRARY_ROOT:-/library}
+      LIBRARY_ALLOW_CROSS_DEVICE_MOVE: ${LIBRARY_ALLOW_CROSS_DEVICE_MOVE:-true}
+      IMPORT_KEEP_INCOMING: ${IMPORT_KEEP_INCOMING:-true}
+      QBITTORRENT_BASE_URL: ${QBITTORRENT_BASE_URL:-}
+      QBITTORRENT_USERNAME: ${QBITTORRENT_USERNAME:-}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD:-}
+      SABNZBD_BASE_URL: ${SABNZBD_BASE_URL:-}
+      SABNZBD_API_KEY: ${SABNZBD_API_KEY:-}
+      SABNZBD_CATEGORY: ${SABNZBD_CATEGORY:-books}
+      NZBGET_BASE_URL: ${NZBGET_BASE_URL:-}
+      NZBGET_USERNAME: ${NZBGET_USERNAME:-}
+      NZBGET_PASSWORD: ${NZBGET_PASSWORD:-}
+      NZBGET_CATEGORY: ${NZBGET_CATEGORY:-books}
+      DOWNLOAD_QUARANTINE_MODE: ${DOWNLOAD_QUARANTINE_MODE:-last_resort}
+    volumes:
+      - ${LIBRARY_ROOT_HOST:-./library}:/library
+    depends_on:
+      metadata-service:
+        condition: service_started
+      indexer-service:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  bookwyrm_pgdata:

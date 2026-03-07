@@ -32,7 +32,7 @@ func NewManager(store Storage, downloadSvc *download.Service, indexerClient *ind
 	}
 }
 
-func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredClient string) (Job, error) {
+func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredClient string, upgradeAction string) (Job, error) {
 	if m.indexerClient == nil {
 		return Job{}, fmt.Errorf("indexer client not configured")
 	}
@@ -70,12 +70,16 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 		return Job{}, fmt.Errorf("no enabled download client for protocol %s", protocol)
 	}
 
+	if strings.TrimSpace(upgradeAction) == "" {
+		upgradeAction = "ask"
+	}
 	job, err := m.store.CreateJob(Job{
 		GrabID:      grab.ID,
 		CandidateID: grab.CandidateID,
 		WorkID:      grab.EntityID,
 		Protocol:    protocol,
 		ClientName:  clientName,
+		UpgradeAction: upgradeAction,
 		RequestPayload: map[string]any{
 			"uri":      uri,
 			"protocol": protocol,

@@ -38,6 +38,7 @@ type Job struct {
 	EditionID      string         `json:"edition_id,omitempty"`
 	Protocol       string         `json:"protocol"`
 	ClientName     string         `json:"client_name"`
+	UpgradeAction  string         `json:"upgrade_action,omitempty"`
 	Status         JobStatus      `json:"status"`
 	DownloadID     string         `json:"download_id,omitempty"`
 	OutputPath     string         `json:"output_path,omitempty"`

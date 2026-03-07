@@ -377,16 +377,17 @@ func (s *PGStore) ReplaceCandidates(requestID int64, candidates []Candidate) ([]
 	}
 	records := make([]CandidateRecord, 0, len(candidates))
 	for _, c := range candidates {
+		c.Fingerprint = ReleaseFingerprint(c)
 		ids, _ := json.Marshal(c.Identifiers)
 		attrs, _ := json.Marshal(c.Attributes)
 		grab, _ := json.Marshal(c.GrabPayload)
 		reasons, _ := json.Marshal(c.Reasons)
 		row := tx.QueryRow(context.Background(), `
 			INSERT INTO indexer_candidates
-			(search_request_id, source_pipeline, source_backend_id, title, normalized_title, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+			(search_request_id, source_pipeline, source_backend_id, title, normalized_title, fingerprint, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
 			RETURNING id, created_at`,
-			requestID, c.SourcePipeline, c.SourceBackendID, c.Title, c.NormalizedTitle, c.Protocol, c.SizeBytes, c.Seeders, c.Leechers, c.PublishedAt, ids, attrs, grab, c.Score, reasons,
+			requestID, c.SourcePipeline, c.SourceBackendID, c.Title, c.NormalizedTitle, c.Fingerprint, c.Protocol, c.SizeBytes, c.Seeders, c.Leechers, c.PublishedAt, ids, attrs, grab, c.Score, reasons,
 		)
 		var rec CandidateRecord
 		rec.SearchRequestID = requestID
@@ -408,7 +409,7 @@ func (s *PGStore) ListCandidates(requestID int64, limit int) ([]CandidateRecord,
 		limit = 50
 	}
 	rows, err := s.db.Query(context.Background(), `
-		SELECT id, source_pipeline, source_backend_id, title, normalized_title, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at
+		SELECT id, source_pipeline, source_backend_id, title, normalized_title, fingerprint, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at
 		FROM indexer_candidates
 		WHERE search_request_id=$1
 		ORDER BY score DESC, id ASC
@@ -422,7 +423,7 @@ func (s *PGStore) ListCandidates(requestID int64, limit int) ([]CandidateRecord,
 		var rec CandidateRecord
 		rec.SearchRequestID = requestID
 		var ids, attrs, grab, reasons []byte
-		if err := rows.Scan(&rec.ID, &rec.Candidate.SourcePipeline, &rec.Candidate.SourceBackendID, &rec.Candidate.Title, &rec.Candidate.NormalizedTitle, &rec.Candidate.Protocol, &rec.Candidate.SizeBytes, &rec.Candidate.Seeders, &rec.Candidate.Leechers, &rec.Candidate.PublishedAt, &ids, &attrs, &grab, &rec.Candidate.Score, &reasons, &rec.CreatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Candidate.SourcePipeline, &rec.Candidate.SourceBackendID, &rec.Candidate.Title, &rec.Candidate.NormalizedTitle, &rec.Candidate.Fingerprint, &rec.Candidate.Protocol, &rec.Candidate.SizeBytes, &rec.Candidate.Seeders, &rec.Candidate.Leechers, &rec.Candidate.PublishedAt, &ids, &attrs, &grab, &rec.Candidate.Score, &reasons, &rec.CreatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(ids, &rec.Candidate.Identifiers)
@@ -439,12 +440,12 @@ func (s *PGStore) ListCandidates(requestID int64, limit int) ([]CandidateRecord,
 
 func (s *PGStore) GetCandidateByID(id int64) (CandidateRecord, error) {
 	row := s.db.QueryRow(context.Background(), `
-		SELECT search_request_id, source_pipeline, source_backend_id, title, normalized_title, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at
+		SELECT search_request_id, source_pipeline, source_backend_id, title, normalized_title, fingerprint, protocol, size_bytes, seeders, leechers, published_at, identifiers, attributes, grab_payload, score, reasons, created_at
 		FROM indexer_candidates WHERE id=$1`, id)
 	var rec CandidateRecord
 	rec.ID = id
 	var ids, attrs, grab, reasons []byte
-	if err := row.Scan(&rec.SearchRequestID, &rec.Candidate.SourcePipeline, &rec.Candidate.SourceBackendID, &rec.Candidate.Title, &rec.Candidate.NormalizedTitle, &rec.Candidate.Protocol, &rec.Candidate.SizeBytes, &rec.Candidate.Seeders, &rec.Candidate.Leechers, &rec.Candidate.PublishedAt, &ids, &attrs, &grab, &rec.Candidate.Score, &reasons, &rec.CreatedAt); err != nil {
+	if err := row.Scan(&rec.SearchRequestID, &rec.Candidate.SourcePipeline, &rec.Candidate.SourceBackendID, &rec.Candidate.Title, &rec.Candidate.NormalizedTitle, &rec.Candidate.Fingerprint, &rec.Candidate.Protocol, &rec.Candidate.SizeBytes, &rec.Candidate.Seeders, &rec.Candidate.Leechers, &rec.Candidate.PublishedAt, &ids, &attrs, &grab, &rec.Candidate.Score, &reasons, &rec.CreatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return CandidateRecord{}, ErrNotFound
 		}
@@ -458,10 +459,46 @@ func (s *PGStore) GetCandidateByID(id int64) (CandidateRecord, error) {
 }
 
 func (s *PGStore) CreateGrab(candidateID int64, entityType string, entityID string) (GrabRecord, error) {
+	// Look up the candidate's fingerprint for dedup.
+	var fingerprint string
+	fpRow := s.db.QueryRow(context.Background(), `SELECT COALESCE(fingerprint,'') FROM indexer_candidates WHERE id=$1`, candidateID)
+	if err := fpRow.Scan(&fingerprint); err != nil {
+		if err == pgx.ErrNoRows {
+			return GrabRecord{}, ErrNotFound
+		}
+		return GrabRecord{}, err
+	}
+
+	// Idempotent insert: if fingerprint is non-empty, ON CONFLICT returns existing row.
+	if fingerprint != "" {
+		_, err := s.db.Exec(context.Background(), `
+			INSERT INTO indexer_grabs (candidate_id, fingerprint, entity_type, entity_id, status, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,'created',NOW(),NOW())
+			ON CONFLICT (fingerprint, entity_type, entity_id) WHERE fingerprint IS NOT NULL DO NOTHING`,
+			candidateID, fingerprint, entityType, entityID,
+		)
+		if err != nil {
+			return GrabRecord{}, err
+		}
+		// Select the existing (or just-inserted) row by fingerprint+entity.
+		row := s.db.QueryRow(context.Background(), `
+			SELECT id, candidate_id, fingerprint, entity_type, entity_id, status, COALESCE(downstream_ref,''), created_at, updated_at
+			FROM indexer_grabs
+			WHERE fingerprint=$1 AND entity_type=$2 AND entity_id=$3`,
+			fingerprint, entityType, entityID,
+		)
+		var rec GrabRecord
+		if err := row.Scan(&rec.ID, &rec.CandidateID, &rec.Fingerprint, &rec.EntityType, &rec.EntityID, &rec.Status, &rec.DownstreamRef, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return GrabRecord{}, err
+		}
+		return rec, nil
+	}
+
+	// No fingerprint — fall back to plain insert (no dedup).
 	row := s.db.QueryRow(context.Background(), `
 		INSERT INTO indexer_grabs (candidate_id, entity_type, entity_id, status, created_at, updated_at)
 		VALUES ($1,$2,$3,'created',NOW(),NOW())
-		RETURNING id,status,downstream_ref,created_at,updated_at`,
+		RETURNING id,status,COALESCE(downstream_ref,''),created_at,updated_at`,
 		candidateID, entityType, entityID,
 	)
 	var rec GrabRecord
@@ -476,11 +513,11 @@ func (s *PGStore) CreateGrab(candidateID int64, entityType string, entityID stri
 
 func (s *PGStore) GetGrabByID(id int64) (GrabRecord, error) {
 	row := s.db.QueryRow(context.Background(), `
-		SELECT candidate_id, entity_type, entity_id, status, COALESCE(downstream_ref,''), created_at, updated_at
+		SELECT candidate_id, fingerprint, entity_type, entity_id, status, COALESCE(downstream_ref,''), created_at, updated_at
 		FROM indexer_grabs WHERE id=$1`, id)
 	var rec GrabRecord
 	rec.ID = id
-	if err := row.Scan(&rec.CandidateID, &rec.EntityType, &rec.EntityID, &rec.Status, &rec.DownstreamRef, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.CandidateID, &rec.Fingerprint, &rec.EntityType, &rec.EntityID, &rec.Status, &rec.DownstreamRef, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return GrabRecord{}, ErrNotFound
 		}
@@ -830,7 +867,7 @@ func (s *PGStore) RecomputeReliability() error {
 
 func (s *PGStore) ListProfiles() []ProfileWithQualities {
 	rows, err := s.db.Query(context.Background(), `
-		SELECT id, name, cutoff_quality, default_profile, created_at, updated_at
+		SELECT id, name, cutoff_quality, upgrade_action, default_profile, created_at, updated_at
 		FROM indexer_profiles
 		ORDER BY default_profile DESC, name ASC`)
 	if err != nil {
@@ -840,7 +877,7 @@ func (s *PGStore) ListProfiles() []ProfileWithQualities {
 	out := make([]ProfileWithQualities, 0)
 	for rows.Next() {
 		var rec ProfileRecord
-		if err := rows.Scan(&rec.ID, &rec.Name, &rec.CutoffQuality, &rec.DefaultProfile, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Name, &rec.CutoffQuality, &rec.UpgradeAction, &rec.DefaultProfile, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 			continue
 		}
 		qRows, qErr := s.db.Query(context.Background(), `
@@ -881,23 +918,27 @@ func (s *PGStore) UpsertProfile(profile ProfileRecord, qualities []ProfileQualit
 	if profile.CutoffQuality == "" {
 		profile.CutoffQuality = "epub"
 	}
+	if profile.UpgradeAction == "" {
+		profile.UpgradeAction = "ask"
+	}
 	if profile.DefaultProfile {
 		if _, err := tx.Exec(context.Background(), `UPDATE indexer_profiles SET default_profile=FALSE WHERE default_profile=TRUE`); err != nil {
 			return ProfileWithQualities{}, err
 		}
 	}
 	row := tx.QueryRow(context.Background(), `
-		INSERT INTO indexer_profiles (id, name, cutoff_quality, default_profile, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,NOW(),NOW())
+		INSERT INTO indexer_profiles (id, name, cutoff_quality, upgrade_action, default_profile, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			name=EXCLUDED.name,
 			cutoff_quality=EXCLUDED.cutoff_quality,
+			upgrade_action=EXCLUDED.upgrade_action,
 			default_profile=EXCLUDED.default_profile,
 			updated_at=NOW()
-		RETURNING id, name, cutoff_quality, default_profile, created_at, updated_at`,
-		profile.ID, profile.Name, profile.CutoffQuality, profile.DefaultProfile,
+		RETURNING id, name, cutoff_quality, upgrade_action, default_profile, created_at, updated_at`,
+		profile.ID, profile.Name, profile.CutoffQuality, profile.UpgradeAction, profile.DefaultProfile,
 	)
-	if err := row.Scan(&profile.ID, &profile.Name, &profile.CutoffQuality, &profile.DefaultProfile, &profile.CreatedAt, &profile.UpdatedAt); err != nil {
+	if err := row.Scan(&profile.ID, &profile.Name, &profile.CutoffQuality, &profile.UpgradeAction, &profile.DefaultProfile, &profile.CreatedAt, &profile.UpdatedAt); err != nil {
 		return ProfileWithQualities{}, err
 	}
 	if _, err := tx.Exec(context.Background(), `DELETE FROM indexer_profile_qualities WHERE profile_id=$1`, profile.ID); err != nil {
@@ -954,6 +995,10 @@ func (s *PGStore) DeleteProfile(id string) error {
 		}
 	}
 	return tx.Commit(context.Background())
+}
+
+func (s *PGStore) Ping() error {
+	return s.db.Ping(context.Background())
 }
 
 func (s *PGStore) GetDefaultProfileID() string {

@@ -10,6 +10,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 import { getPresetsForPage } from '../presets/views'
 
 type WantedWork = {
@@ -139,7 +140,7 @@ export function MissingPage() {
       setWorkIDInput('')
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const deleteMutation = useMutation({
@@ -150,7 +151,7 @@ export function MissingPage() {
       pushToast('Wanted work removed')
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const searchMutation = useMutation({
@@ -158,7 +159,7 @@ export function MissingPage() {
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
     },
     onSuccess: () => pushToast('Search request enqueued'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const bulkSearchMutation = useMutation({
@@ -172,7 +173,7 @@ export function MissingPage() {
       })
     },
     onSuccess: (_data, variables) => pushToast(`${variables.length} searches queued`),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const rows = useMemo<MissingRow[]>(() => {

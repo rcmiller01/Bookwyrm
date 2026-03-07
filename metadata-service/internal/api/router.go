@@ -51,10 +51,10 @@ func NewRouter(h *Handlers, opts ...RouterOptions) http.Handler {
 
 	// Observability
 	r.Handle("/metrics", promhttp.Handler())
-	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	}).Methods(http.MethodGet)
+	r.HandleFunc("/health", h.Healthz).Methods(http.MethodGet)
+	r.HandleFunc("/healthz", h.Healthz).Methods(http.MethodGet)
+	r.HandleFunc("/readyz", h.Readyz).Methods(http.MethodGet)
+	v1.HandleFunc("/health", h.Healthz).Methods(http.MethodGet)
 
-	return r
+	return httpMetrics("metadata", r)
 }

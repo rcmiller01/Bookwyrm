@@ -5,7 +5,9 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
-import { fetchJSON, patchJSON } from '../lib/api'
+import { useState } from 'react'
+import { fetchJSON, patchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type DownloadClient = {
   id: string
@@ -41,8 +43,25 @@ export function DownloadClientsPage() {
       await queryClient.invalidateQueries({ queryKey: ['settings', 'download-clients'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard', 'download-clients'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
+
+  const [testing, setTesting] = useState<string | null>(null)
+  const testConnection = async (clientID: string) => {
+    setTesting(clientID)
+    try {
+      const result = await postJSON<{ ok: boolean; error?: string }>(`/api/v1/test-connection/download-client/${encodeURIComponent(clientID)}`, {})
+      if (result.ok) {
+        pushToast(`${clientID}: connection successful`)
+      } else {
+        pushToast(`${clientID}: ${result.error ?? 'test failed'}`)
+      }
+    } catch (error) {
+      pushToast(`${clientID}: ${errorMessage(error)}`)
+    } finally {
+      setTesting(null)
+    }
+  }
 
   const rows = useMemo(() => {
     const lowered = query.trim().toLowerCase()
@@ -97,6 +116,13 @@ export function DownloadClientsPage() {
                 <td className="px-3 py-2">{row.tier}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300"
+                      disabled={testing === row.id}
+                      onClick={() => void testConnection(row.id)}
+                    >
+                      {testing === row.id ? 'Testing...' : 'Test'}
+                    </button>
                     <button
                       className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200"
                       onClick={() => updateMutation.mutate({ id: row.id, enabled: !row.enabled })}

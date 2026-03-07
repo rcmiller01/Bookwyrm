@@ -53,6 +53,14 @@ func (s *Service) Register(client Client) {
 	s.clients[strings.ToLower(strings.TrimSpace(client.Name()))] = client
 }
 
+func (s *Service) ListClientNames() []string {
+	names := make([]string, 0, len(s.clients))
+	for name := range s.clients {
+		names = append(names, name)
+	}
+	return names
+}
+
 func (s *Service) HasClient(clientName string) bool {
 	key := strings.ToLower(strings.TrimSpace(clientName))
 	if key == "" {

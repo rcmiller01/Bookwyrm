@@ -47,4 +47,7 @@ type Storage interface {
 
 	RecordBackendSearchResult(backendID string, success bool, latency time.Duration, yielded bool) error
 	RecomputeReliability() error
+
+	// Ping checks connectivity to the underlying storage backend.
+	Ping() error
 }

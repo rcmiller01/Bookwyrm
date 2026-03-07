@@ -9,6 +9,7 @@ import (
 
 	"indexer-service/internal/indexer"
 	"indexer-service/internal/mcp"
+	"indexer-service/internal/version"
 
 	"github.com/gorilla/mux"
 )
@@ -31,8 +32,47 @@ func NewHandlers(service *indexer.Service, store indexer.Storage, orchestrator *
 	}
 }
 
-func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]any{"status": "ok"})
+func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
+	h.Healthz(w, r)
+}
+
+func (h *Handlers) Healthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{
+		"status":  "ok",
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+	})
+}
+
+func (h *Handlers) Readyz(w http.ResponseWriter, _ *http.Request) {
+	checks := map[string]string{}
+	allOK := true
+
+	if h.store != nil {
+		if err := h.store.Ping(); err != nil {
+			checks["database"] = "error: " + err.Error()
+			allOK = false
+		} else {
+			checks["database"] = "ok"
+		}
+	}
+
+	status := "ok"
+	code := http.StatusOK
+	if !allOK {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":  status,
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+		"checks":  checks,
+	})
 }
 
 func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +304,7 @@ func (h *Handlers) UpsertProfile(w http.ResponseWriter, r *http.Request) {
 		ID             string `json:"id"`
 		Name           string `json:"name"`
 		CutoffQuality  string `json:"cutoff_quality"`
+		UpgradeAction  string `json:"upgrade_action"`
 		DefaultProfile bool   `json:"default_profile"`
 		Qualities      []struct {
 			Quality string `json:"quality"`
@@ -285,6 +326,7 @@ func (h *Handlers) UpsertProfile(w http.ResponseWriter, r *http.Request) {
 		ID:             id,
 		Name:           strings.TrimSpace(body.Name),
 		CutoffQuality:  strings.TrimSpace(body.CutoffQuality),
+		UpgradeAction:  strings.TrimSpace(body.UpgradeAction),
 		DefaultProfile: body.DefaultProfile,
 	}
 	qualities := make([]indexer.ProfileQualityRecord, 0, len(body.Qualities))

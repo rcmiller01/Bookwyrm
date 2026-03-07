@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ToastProvider'
 import { usePolling } from '../hooks/usePolling'
 import { fetchJSON, postJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type EnqueueSearchResponse = {
   search_request_id: number
@@ -137,7 +138,7 @@ export function ManualSearchPage() {
       setSearchStartedAt(Date.now())
       pushToast(`Search queued (#${payload.search_request_id})`)
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const grabMutation = useMutation({
@@ -149,7 +150,7 @@ export function ManualSearchPage() {
       return grabbed
     },
     onSuccess: () => pushToast(autoHandoff ? 'Candidate grabbed and handed off to downloader' : 'Candidate grabbed'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const preferredMutation = useMutation({
@@ -159,7 +160,7 @@ export function ManualSearchPage() {
       pushToast('Preferred source updated')
       await queryClient.invalidateQueries({ queryKey: ['indexers', 'backends'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const candidateRows = candidatesQuery.data?.items ?? []

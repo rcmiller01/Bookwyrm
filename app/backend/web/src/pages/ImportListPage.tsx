@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CandidateComparisonTable } from '../components/CandidateComparisonTable'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { EventTimeline } from '../components/EventTimeline'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type ImportJob = {
   id: number
@@ -22,7 +25,15 @@ type ImportJob = {
 }
 
 type ImportJobsResponse = { items: ImportJob[] }
-type ImportJobDetailResponse = { job: ImportJob; events: unknown[] }
+type ImportEvent = {
+  id?: number
+  ts?: string
+  event_type?: string
+  message?: string
+  payload?: Record<string, unknown>
+}
+
+type ImportJobDetailResponse = { job: ImportJob; events: ImportEvent[] }
 
 const DECISIONS = ['keep_both', 'replace_existing', 'skip'] as const
 
@@ -62,12 +73,12 @@ export function ImportListPage() {
     enabled: selectedID !== null
   })
 
-  const refreshList = async () => {
+  const refreshList = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['activity', 'import-needs-review'] })
     if (selectedID !== null) {
       await queryClient.invalidateQueries({ queryKey: ['activity', 'import-job', selectedID] })
     }
-  }
+  }, [queryClient, selectedID])
 
   const approveMutation = useMutation({
     mutationFn: (payload: { id: number; workID: string; editionID: string }) =>
@@ -79,7 +90,7 @@ export function ImportListPage() {
       pushToast('Import job approved')
       await refreshList()
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const retryMutation = useMutation({
@@ -88,7 +99,7 @@ export function ImportListPage() {
       pushToast('Import job retried')
       await refreshList()
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const skipMutation = useMutation({
@@ -98,7 +109,7 @@ export function ImportListPage() {
       setConfirmSkip(false)
       await refreshList()
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const decideMutation = useMutation({
@@ -108,8 +119,48 @@ export function ImportListPage() {
       pushToast('Decision applied')
       await refreshList()
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
+
+  const [approveRerunning, setApproveRerunning] = useState(false)
+  const approveRerunAbort = useRef(false)
+
+  const approveAndRerun = useCallback(async (jobId: number, workID: string, editionID: string) => {
+    if (!workID.trim()) {
+      pushToast('Work ID is required for approve')
+      return
+    }
+    setApproveRerunning(true)
+    approveRerunAbort.current = false
+    try {
+      await postNoContent(`/api/v1/import/jobs/${jobId}/approve`, {
+        work_id: workID.trim(),
+        edition_id: editionID.trim()
+      })
+      // Poll until status leaves needs_review (10s timeout)
+      const deadline = Date.now() + 10_000
+      while (Date.now() < deadline && !approveRerunAbort.current) {
+        await new Promise((r) => setTimeout(r, 500))
+        try {
+          const detail = await fetchJSON<ImportJobDetailResponse>(`/api/v1/import/jobs/${jobId}`)
+          const status = detail.job.status
+          if (status !== 'needs_review' && status !== 'queued' && status !== 'running') {
+            pushToast(`Import job #${jobId}: ${status}`)
+            await refreshList()
+            return
+          }
+        } catch {
+          // polling error, continue
+        }
+      }
+      pushToast('Approved — rerun in progress (check back shortly)')
+      await refreshList()
+    } catch (err) {
+      pushToast(errorMessage(err))
+    } finally {
+      setApproveRerunning(false)
+    }
+  }, [pushToast, refreshList])
 
   const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase()
@@ -124,8 +175,34 @@ export function ImportListPage() {
     })
   }, [listQuery.data?.items, query])
 
-  const decisionContext = detailQuery.data?.job.decision_json ?? selectedJob?.decision_json ?? {}
+  const decisionContext = useMemo(
+    () => detailQuery.data?.job.decision_json ?? selectedJob?.decision_json ?? {},
+    [detailQuery.data?.job.decision_json, selectedJob?.decision_json]
+  )
   const namingPreview = detailQuery.data?.job.naming_result_json ?? selectedJob?.naming_result_json ?? {}
+
+  const candidateRows = useMemo(() => {
+    const raw = decisionContext.candidates
+    if (!Array.isArray(raw)) return []
+    return raw.map((c: Record<string, unknown>) => ({
+      work_id: typeof c.work_id === 'string' ? c.work_id : undefined,
+      title: typeof c.title === 'string' ? c.title : undefined,
+      title_score: typeof c.title_score === 'number' ? c.title_score : undefined,
+      author_score: typeof c.author_score === 'number' ? c.author_score : undefined,
+      score: typeof c.score === 'number' ? c.score : undefined,
+      reason: typeof c.reason === 'string' ? c.reason : undefined
+    }))
+  }, [decisionContext])
+
+  const collisionInfo = useMemo(() => {
+    const col = decisionContext.collision
+    if (!col || typeof col !== 'object') return null
+    return col as { target_path?: string; reason?: string }
+  }, [decisionContext])
+
+  const detailEvents = useMemo(() => {
+    return (detailQuery.data?.events ?? []) as ImportEvent[]
+  }, [detailQuery.data?.events])
 
   return (
     <section className="space-y-4">
@@ -165,7 +242,18 @@ export function ImportListPage() {
                   ].join(' ')}
                   onClick={() => {
                     setSelectedID(job.id)
-                    setApproveWorkID(job.work_id || '')
+                    // Auto-populate from the highest-scoring candidate if available
+                    const candidates = Array.isArray(job.decision_json?.candidates) ? job.decision_json.candidates : []
+                    const topCandidate = candidates.length > 0
+                      ? (candidates as Array<Record<string, unknown>>).reduce((best, c) => {
+                          const bs = typeof best.score === 'number' ? best.score : 0
+                          const cs = typeof c.score === 'number' ? c.score : 0
+                          return cs > bs ? c : best
+                        })
+                      : null
+                    setApproveWorkID(
+                      (topCandidate && typeof topCandidate.work_id === 'string' ? topCandidate.work_id : null) || job.work_id || ''
+                    )
                     setApproveEditionID(job.edition_id || '')
                   }}
                 >
@@ -197,12 +285,48 @@ export function ImportListPage() {
               <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
                 <p className="text-xs uppercase text-slate-400">Naming preview</p>
                 <p className="mt-1 text-xs text-slate-300">Final path: {selectedJob.target_path || '(pending)'} </p>
-                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(namingPreview, null, 2)}</pre>
+                {Object.keys(namingPreview).length > 0 ? (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300">raw naming data</summary>
+                    <pre className="mt-1 overflow-auto text-[10px] text-slate-200">{JSON.stringify(namingPreview, null, 2)}</pre>
+                  </details>
+                ) : null}
               </div>
+
               <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
-                <p className="text-xs uppercase text-slate-400">Candidate comparison context</p>
-                <pre className="mt-1 overflow-auto text-xs text-slate-200">{JSON.stringify(decisionContext, null, 2)}</pre>
+                <p className="text-xs uppercase text-slate-400">Candidate comparison</p>
+                {candidateRows.length > 0 ? (
+                  <CandidateComparisonTable
+                    candidates={candidateRows}
+                    onApprove={(workId) => {
+                      setApproveWorkID(workId)
+                      setApproveEditionID('')
+                    }}
+                  />
+                ) : (
+                  <p className="mt-1 text-xs text-slate-400">No candidate data in decision context.</p>
+                )}
+                {collisionInfo ? (
+                  <div className="mt-2 rounded border border-amber-900/60 bg-amber-950/30 p-2">
+                    <p className="text-xs font-medium text-amber-300">Collision detected</p>
+                    <p className="mt-0.5 text-xs text-amber-200/80">Target: {collisionInfo.target_path ?? '(unknown)'}</p>
+                    {collisionInfo.reason ? <p className="mt-0.5 text-xs text-amber-200/80">Reason: {collisionInfo.reason}</p> : null}
+                  </div>
+                ) : null}
+                {Object.keys(decisionContext).length > 0 ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300">raw decision data</summary>
+                    <pre className="mt-1 overflow-auto text-[10px] text-slate-200">{JSON.stringify(decisionContext, null, 2)}</pre>
+                  </details>
+                ) : null}
               </div>
+
+              {detailEvents.length > 0 ? (
+                <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
+                  <p className="text-xs uppercase text-slate-400 mb-2">Event timeline</p>
+                  <EventTimeline events={detailEvents} />
+                </div>
+              ) : null}
 
               <label className="block">
                 <span className="text-xs uppercase text-slate-400">Approve Work ID</span>
@@ -227,6 +351,13 @@ export function ImportListPage() {
                   onClick={() => approveMutation.mutate({ id: selectedJob.id, workID: approveWorkID.trim(), editionID: approveEditionID.trim() })}
                 >
                   Approve
+                </button>
+                <button
+                  className="rounded bg-emerald-700/80 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                  disabled={approveRerunning}
+                  onClick={() => approveAndRerun(selectedJob.id, approveWorkID, approveEditionID)}
+                >
+                  {approveRerunning ? '⟳ Running...' : 'Approve & Rerun'}
                 </button>
                 <button
                   className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"

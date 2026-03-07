@@ -1,0 +1,12 @@
+.git/
+.github/
+.vscode/
+.idea/
+.claude/
+node_modules/
+dist/
+*.md
+!docs/*.md
+.env
+.env.*
+*.log

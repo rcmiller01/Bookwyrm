@@ -1,16 +1,22 @@
 package api
 
 import (
+	"encoding/json"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+const proxyTimeout = 15 * time.Second
 
 type RouterConfig struct {
 	UIAssetsDir          string
@@ -27,6 +33,10 @@ func NewRouterWithConfig(h *Handlers, cfg RouterConfig) http.Handler {
 	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.HandleFunc("/health", h.Health).Methods(http.MethodGet)
+	api.HandleFunc("/healthz", h.Healthz).Methods(http.MethodGet)
+	api.HandleFunc("/readyz", h.Readyz).Methods(http.MethodGet)
+	api.HandleFunc("/system/status", h.SystemStatus).Methods(http.MethodGet)
+	api.HandleFunc("/system/health-detail", h.HealthDetail).Methods(http.MethodGet)
 	api.HandleFunc("/search", h.Search).Methods(http.MethodGet)
 	api.HandleFunc("/works/{id}/intelligence", h.GetWorkIntelligence).Methods(http.MethodGet)
 	api.HandleFunc("/works/{id}/availability", h.GetAvailability).Methods(http.MethodGet)
@@ -57,6 +67,7 @@ func NewRouterWithConfig(h *Handlers, cfg RouterConfig) http.Handler {
 	api.HandleFunc("/import/jobs/{id}/skip", h.SkipImportJob).Methods(http.MethodPost)
 	api.HandleFunc("/import/stats", h.GetImportStats).Methods(http.MethodGet)
 	api.HandleFunc("/library/items", h.ListLibraryItems).Methods(http.MethodGet)
+	api.HandleFunc("/test-connection/download-client/{id}", h.TestDownloadClient).Methods(http.MethodPost)
 
 	if metadataProxy := newPathProxy(cfg.MetadataProxyBaseURL, "/ui-api/metadata", "/v1"); metadataProxy != nil {
 		r.Handle("/ui-api/metadata", metadataProxy)
@@ -73,7 +84,7 @@ func NewRouterWithConfig(h *Handlers, cfg RouterConfig) http.Handler {
 		r.PathPrefix("/").Handler(spaFallbackHandler(cfg.UIAssetsDir))
 	}
 
-	return r
+	return HTTPMetrics("backend", SecurityHeaders(r))
 }
 
 func newPathProxy(baseURL string, stripPrefix string, upstreamPrefix string) http.Handler {
@@ -86,6 +97,37 @@ func newPathProxy(baseURL string, stripPrefix string, upstreamPrefix string) htt
 		return nil
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: proxyTimeout,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   10,
+	}
+
+	serviceName := strings.Trim(stripPrefix, "/")
+	envVarHint := ""
+	if strings.Contains(serviceName, "metadata") {
+		envVarHint = "METADATA_SERVICE_URL"
+	} else if strings.Contains(serviceName, "indexer") {
+		envVarHint = "INDEXER_SERVICE_URL"
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, proxyErr error) {
+		log.Printf("proxy %s error: %v", serviceName, proxyErr)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		msg := serviceName + " service unavailable"
+		guidance := "Verify the service is running at " + baseURL
+		if envVarHint != "" {
+			guidance += " (configured via " + envVarHint + ")"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":    msg,
+			"message":  msg + ": " + proxyErr.Error(),
+			"guidance": guidance,
+			"category": "connectivity",
+		})
+	}
+
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)

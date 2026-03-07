@@ -33,6 +33,12 @@ func ApplyScoring(candidates []Candidate, backendMap map[string]BackendRecord, q
 			score += 0.05
 			reasons = append(reasons, Reason{Code: "seeders_present", Weight: 0.05})
 		}
+		if pref, ok := backend.Config["preferred"]; ok {
+			if preferred, isBool := pref.(bool); isBool && preferred {
+				score += 0.10
+				reasons = append(reasons, Reason{Code: "preferred_source", Weight: 0.10})
+			}
+		}
 		if score > 0.99 {
 			score = 0.99
 		}
@@ -54,10 +60,7 @@ func DedupeCandidates(candidates []Candidate) []Candidate {
 	seen := map[string]struct{}{}
 	out := make([]Candidate, 0, len(candidates))
 	for _, c := range candidates {
-		key := strings.ToLower(strings.TrimSpace(c.Title)) + "|" + strings.ToLower(strings.TrimSpace(c.Protocol))
-		if c.SizeBytes != nil {
-			key += "|" + itoa64(*c.SizeBytes)
-		}
+		key := ReleaseFingerprint(c)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -65,6 +68,49 @@ func DedupeCandidates(candidates []Candidate) []Candidate {
 		out = append(out, c)
 	}
 	return out
+}
+
+// ReleaseFingerprint builds a composite dedup key for a candidate.
+// The key combines: normalized title, protocol, MB-level size bucket,
+// and sorted identifiers (ISBN, DOI, etc.). Two candidates with the same
+// ISBN but different titles will share a fingerprint and be deduped.
+func ReleaseFingerprint(c Candidate) string {
+	title := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(c.Title)), " "))
+	protocol := strings.ToLower(strings.TrimSpace(c.Protocol))
+
+	sizePart := ""
+	if c.SizeBytes != nil {
+		bucket := *c.SizeBytes / (1024 * 1024) // MB-level bucket
+		sizePart = itoa64(bucket)
+	}
+
+	idPart := sortedIdentifiers(c.Identifiers)
+
+	// If identifiers are present, they dominate the key (two releases with
+	// the same ISBN are the same release even if titles differ slightly).
+	if idPart != "" {
+		return idPart + "|" + protocol + "|" + sizePart
+	}
+	return title + "|" + protocol + "|" + sizePart
+}
+
+func sortedIdentifiers(ids map[string]any) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	// Collect all non-empty identifier values.
+	vals := make([]string, 0, len(ids))
+	for _, v := range ids {
+		s := strings.ToLower(strings.TrimSpace(toString(v)))
+		if s != "" {
+			vals = append(vals, s)
+		}
+	}
+	if len(vals) == 0 {
+		return ""
+	}
+	sort.Strings(vals)
+	return strings.Join(vals, ";")
 }
 
 func hasIdentifier(c Candidate, target string) bool {

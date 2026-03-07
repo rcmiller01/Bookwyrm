@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ToastProvider'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type ProfileQuality = {
   profile_id: string
@@ -13,6 +14,7 @@ type ProfileRecord = {
   id: string
   name: string
   cutoff_quality: string
+  upgrade_action: string
   default_profile: boolean
 }
 
@@ -34,12 +36,19 @@ function normalizeQualities(value: string): { quality: string; rank: number }[] 
     .map((quality, idx) => ({ quality, rank: idx + 1 }))
 }
 
+const upgradeActionLabels: Record<string, string> = {
+  ask: 'Ask (manual review)',
+  replace: 'Replace existing',
+  keep_both: 'Keep both'
+}
+
 export function ProfilesPage() {
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
   const [newID, setNewID] = useState('')
   const [newName, setNewName] = useState('')
   const [newCutoff, setNewCutoff] = useState('epub')
+  const [newUpgradeAction, setNewUpgradeAction] = useState('ask')
   const [newQualities, setNewQualities] = useState('epub,azw3,mobi,pdf')
   const [editingID, setEditingID] = useState<string | null>(null)
 
@@ -54,6 +63,7 @@ export function ProfilesPage() {
         id: newID.trim(),
         name: newName.trim(),
         cutoff_quality: newCutoff.trim().toLowerCase(),
+        upgrade_action: newUpgradeAction,
         qualities: normalizeQualities(newQualities),
         default_profile: false
       })
@@ -63,18 +73,20 @@ export function ProfilesPage() {
       setNewID('')
       setNewName('')
       setNewCutoff('epub')
+      setNewUpgradeAction('ask')
       setNewQualities('epub,azw3,mobi,pdf')
       await queryClient.invalidateQueries({ queryKey: ['settings', 'profiles'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: { id: string; name: string; cutoff: string; qualities: string; defaultProfile: boolean }) => {
+    mutationFn: async (payload: { id: string; name: string; cutoff: string; upgradeAction: string; qualities: string; defaultProfile: boolean }) => {
       await postJSON(`/ui-api/indexer/profiles/${encodeURIComponent(payload.id)}`, {
         id: payload.id,
         name: payload.name.trim(),
         cutoff_quality: payload.cutoff.trim().toLowerCase(),
+        upgrade_action: payload.upgradeAction,
         qualities: normalizeQualities(payload.qualities),
         default_profile: payload.defaultProfile
       })
@@ -84,7 +96,7 @@ export function ProfilesPage() {
       setEditingID(null)
       await queryClient.invalidateQueries({ queryKey: ['settings', 'profiles'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const deleteMutation = useMutation({
@@ -95,13 +107,14 @@ export function ProfilesPage() {
       pushToast('Profile deleted')
       await queryClient.invalidateQueries({ queryKey: ['settings', 'profiles'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
-  const items = profilesQuery.data?.items ?? []
+  const items = useMemo(() => profilesQuery.data?.items ?? [], [profilesQuery.data?.items])
   const editable = useMemo(() => items.find((item) => item.profile.id === editingID) ?? null, [editingID, items])
   const [editName, setEditName] = useState('')
   const [editCutoff, setEditCutoff] = useState('')
+  const [editUpgradeAction, setEditUpgradeAction] = useState('ask')
   const [editQualities, setEditQualities] = useState('')
   const [editDefault, setEditDefault] = useState(false)
 
@@ -109,6 +122,7 @@ export function ProfilesPage() {
     setEditingID(item.profile.id)
     setEditName(item.profile.name)
     setEditCutoff(item.profile.cutoff_quality)
+    setEditUpgradeAction(item.profile.upgrade_action || 'ask')
     setEditQualities(item.qualities.map((q) => q.quality).join(','))
     setEditDefault(item.profile.default_profile)
   }
@@ -130,6 +144,7 @@ export function ProfilesPage() {
       id: editingID,
       name: editName,
       cutoff: editCutoff,
+      upgradeAction: editUpgradeAction,
       qualities: editQualities,
       defaultProfile: editDefault
     })
@@ -142,7 +157,7 @@ export function ProfilesPage() {
         <p className="text-sm text-slate-400">Quality ordering and cutoff profiles used by wanted items and upgrades.</p>
       </header>
 
-      <form className="grid gap-3 rounded border border-slate-800 bg-slate-900/60 p-3 md:grid-cols-5" onSubmit={onCreate}>
+      <form className="grid gap-3 rounded border border-slate-800 bg-slate-900/60 p-3 md:grid-cols-6" onSubmit={onCreate}>
         <label className="text-sm text-slate-300">
           ID
           <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={newID} onChange={(e) => setNewID(e.target.value)} />
@@ -155,11 +170,19 @@ export function ProfilesPage() {
           Cutoff
           <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={newCutoff} onChange={(e) => setNewCutoff(e.target.value)} />
         </label>
+        <label className="text-sm text-slate-300">
+          Upgrade action
+          <select className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={newUpgradeAction} onChange={(e) => setNewUpgradeAction(e.target.value)}>
+            <option value="ask">Ask (manual review)</option>
+            <option value="replace">Replace existing</option>
+            <option value="keep_both">Keep both</option>
+          </select>
+        </label>
         <label className="text-sm text-slate-300 md:col-span-2">
           Quality order (best to worst)
           <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={newQualities} onChange={(e) => setNewQualities(e.target.value)} />
         </label>
-        <div className="md:col-span-5">
+        <div className="md:col-span-6">
           <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" type="submit">
             Create Profile
           </button>
@@ -173,6 +196,7 @@ export function ProfilesPage() {
               <th className="px-3 py-2">ID</th>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Cutoff</th>
+              <th className="px-3 py-2">Upgrade</th>
               <th className="px-3 py-2">Order</th>
               <th className="px-3 py-2">Default</th>
               <th className="px-3 py-2">Actions</th>
@@ -184,6 +208,7 @@ export function ProfilesPage() {
                 <td className="px-3 py-2">{item.profile.id}</td>
                 <td className="px-3 py-2">{item.profile.name}</td>
                 <td className="px-3 py-2">{item.profile.cutoff_quality}</td>
+                <td className="px-3 py-2">{upgradeActionLabels[item.profile.upgrade_action] ?? item.profile.upgrade_action}</td>
                 <td className="px-3 py-2">{item.qualities.map((q) => q.quality).join(' > ')}</td>
                 <td className="px-3 py-2">{item.profile.default_profile ? 'yes' : 'no'}</td>
                 <td className="px-3 py-2">
@@ -196,7 +221,7 @@ export function ProfilesPage() {
             ))}
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-slate-400">No profiles available.</td>
+                <td colSpan={7} className="px-3 py-6 text-center text-slate-400">No profiles available.</td>
               </tr>
             ) : null}
           </tbody>
@@ -206,7 +231,7 @@ export function ProfilesPage() {
       {editable ? (
         <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
           <h3 className="text-sm font-semibold text-slate-100">Edit Profile: {editable.profile.id}</h3>
-          <div className="mt-2 grid gap-3 md:grid-cols-4">
+          <div className="mt-2 grid gap-3 md:grid-cols-5">
             <label className="text-sm text-slate-300">
               Name
               <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -215,11 +240,19 @@ export function ProfilesPage() {
               Cutoff
               <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={editCutoff} onChange={(e) => setEditCutoff(e.target.value)} />
             </label>
+            <label className="text-sm text-slate-300">
+              Upgrade action
+              <select className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={editUpgradeAction} onChange={(e) => setEditUpgradeAction(e.target.value)}>
+                <option value="ask">Ask (manual review)</option>
+                <option value="replace">Replace existing</option>
+                <option value="keep_both">Keep both</option>
+              </select>
+            </label>
             <label className="text-sm text-slate-300 md:col-span-2">
               Quality order
               <input className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100" value={editQualities} onChange={(e) => setEditQualities(e.target.value)} />
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300 md:col-span-4">
+            <label className="flex items-center gap-2 text-sm text-slate-300 md:col-span-5">
               <input type="checkbox" checked={editDefault} onChange={(e) => setEditDefault(e.target.checked)} />
               Set as default profile
             </label>

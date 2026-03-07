@@ -170,7 +170,7 @@ func TestGoldenE2E_EbookPipeline(t *testing.T) {
 	manager.Start(ctx)
 	engine.Start(ctx)
 
-	dJob, err := manager.EnqueueFromGrab(context.Background(), grabID, "nzbget")
+	dJob, err := manager.EnqueueFromGrab(context.Background(), grabID, "nzbget", "")
 	if err != nil {
 		t.Fatalf("enqueue from grab: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestGoldenE2E_AudiobookFolderPipeline(t *testing.T) {
 	manager.Start(ctx)
 	engine.Start(ctx)
 
-	dJob, err := manager.EnqueueFromGrab(context.Background(), grabID, "nzbget")
+	dJob, err := manager.EnqueueFromGrab(context.Background(), grabID, "nzbget", "")
 	if err != nil {
 		t.Fatalf("enqueue from grab: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestGoldenE2E_CollisionUpgradeReplace(t *testing.T) {
 	manager.Start(ctx)
 	engine.Start(ctx)
 
-	first, err := manager.EnqueueFromGrab(context.Background(), 1003, "nzbget")
+	first, err := manager.EnqueueFromGrab(context.Background(), 1003, "nzbget", "")
 	if err != nil {
 		t.Fatalf("enqueue first upgrade grab: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestGoldenE2E_CollisionUpgradeReplace(t *testing.T) {
 		t.Fatalf("expected first import to complete")
 	}
 
-	second, err := manager.EnqueueFromGrab(context.Background(), 1004, "nzbget")
+	second, err := manager.EnqueueFromGrab(context.Background(), 1004, "nzbget", "")
 	if err != nil {
 		t.Fatalf("enqueue second upgrade grab: %v", err)
 	}

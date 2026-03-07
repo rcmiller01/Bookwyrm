@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type WorkPayload = {
   work?: {
@@ -94,7 +95,7 @@ export function BookDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ['book-detail', 'wanted', workID] })
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const searchMutation = useMutation({
@@ -103,7 +104,7 @@ export function BookDetailPage() {
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(workID)}`, { title })
     },
     onSuccess: () => pushToast('Search queued'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const timelineRows = useMemo(() => {
@@ -142,7 +143,7 @@ export function BookDetailPage() {
         subtitle={(workQuery.data?.work?.authors ?? []).map((author) => author.name?.trim()).filter(Boolean).join(', ') || 'Book detail'}
         actions={
           <div className="flex flex-wrap gap-2">
-            <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!Boolean(wanted?.enabled))}>
+            <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!wanted?.enabled)}>
               {wanted?.enabled ? 'Unmonitor' : 'Monitor'}
             </button>
             <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => searchMutation.mutate()}>

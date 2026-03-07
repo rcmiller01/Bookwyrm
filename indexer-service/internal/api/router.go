@@ -4,12 +4,16 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func NewRouter(h *Handlers) http.Handler {
 	r := mux.NewRouter()
+	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 	v1 := r.PathPrefix("/v1/indexer").Subrouter()
 	v1.HandleFunc("/health", h.Health).Methods(http.MethodGet)
+	v1.HandleFunc("/healthz", h.Healthz).Methods(http.MethodGet)
+	v1.HandleFunc("/readyz", h.Readyz).Methods(http.MethodGet)
 	v1.HandleFunc("/providers", h.ListProviders).Methods(http.MethodGet)
 	v1.HandleFunc("/search", h.Search).Methods(http.MethodPost)
 	v1.HandleFunc("/search/work/{workID}", h.EnqueueWorkSearch).Methods(http.MethodPost)
@@ -43,5 +47,5 @@ func NewRouter(h *Handlers) http.Handler {
 	mcp.HandleFunc("/servers/{id}/disable", h.DisableMCPServer).Methods(http.MethodPost)
 	mcp.HandleFunc("/servers/{id}/env", h.SetMCPEnvMapping).Methods(http.MethodPost)
 	mcp.HandleFunc("/servers/{id}/test", h.TestMCPServer).Methods(http.MethodPost)
-	return r
+	return httpMetrics("indexer", r)
 }

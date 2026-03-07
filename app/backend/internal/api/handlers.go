@@ -1,12 +1,17 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"app-backend/internal/domain"
@@ -14,8 +19,10 @@ import (
 	"app-backend/internal/domain/factory"
 	"app-backend/internal/downloadqueue"
 	"app-backend/internal/importer"
+	"app-backend/internal/integration/download"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
+	"app-backend/internal/version"
 	"app-backend/internal/jobs"
 	"app-backend/internal/pipeline"
 	"app-backend/internal/store"
@@ -24,17 +31,22 @@ import (
 )
 
 type Handlers struct {
-	metaClient     *metadata.Client
-	indexerClient  *indexer.Client
-	watchlistStore store.WatchlistStore
-	jobService     *jobs.Service
-	downloadMgr    *downloadqueue.Manager
-	importStore    importer.Store
-	importEngine   *importer.Engine
-	importConfig   ImportConfig
-	domainPack     contract.Domain
-	importer       *pipeline.ImporterPipeline
-	renamer        *pipeline.RenamerPipeline
+	metaClient        *metadata.Client
+	indexerClient     *indexer.Client
+	watchlistStore    store.WatchlistStore
+	jobService        *jobs.Service
+	downloadMgr       *downloadqueue.Manager
+	downloadService   *download.Service
+	importStore       importer.Store
+	importEngine      *importer.Engine
+	importConfig      ImportConfig
+	domainPack        contract.Domain
+	importer          *pipeline.ImporterPipeline
+	renamer           *pipeline.RenamerPipeline
+	metadataHealthURL string
+	indexerHealthURL  string
+	startupTime       time.Time
+	libraryRoot       string
 }
 
 type ImportConfig struct {
@@ -95,8 +107,288 @@ func (h *Handlers) SetImportConfig(cfg ImportConfig) {
 	h.importConfig = cfg
 }
 
-func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]any{"status": "ok"})
+func (h *Handlers) SetDownloadService(svc *download.Service) {
+	h.downloadService = svc
+}
+
+func (h *Handlers) SetUpstreamURLs(metadataBaseURL, indexerBaseURL string) {
+	h.metadataHealthURL = strings.TrimRight(metadataBaseURL, "/") + "/health"
+	h.indexerHealthURL = strings.TrimRight(indexerBaseURL, "/") + "/v1/indexer/health"
+}
+
+func (h *Handlers) SetStartupTime(t time.Time) {
+	h.startupTime = t
+}
+
+func (h *Handlers) SetLibraryRoot(root string) {
+	h.libraryRoot = strings.TrimSpace(root)
+}
+
+func (h *Handlers) Healthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{
+		"status":  "ok",
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+	})
+}
+
+func (h *Handlers) Readyz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	checks := map[string]string{}
+	allOK := true
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	checkUpstream := func(name, healthURL string) {
+		defer wg.Done()
+		status := "ok"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+		if err != nil {
+			status = fmt.Sprintf("error: %v", err)
+		} else {
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				status = fmt.Sprintf("unreachable: %v", err)
+			} else {
+				resp.Body.Close()
+				if resp.StatusCode >= 300 {
+					status = fmt.Sprintf("status %d", resp.StatusCode)
+				}
+			}
+		}
+		mu.Lock()
+		checks[name] = status
+		if status != "ok" {
+			allOK = false
+		}
+		mu.Unlock()
+	}
+
+	if h.metadataHealthURL != "" {
+		wg.Add(1)
+		go checkUpstream("metadata_service", h.metadataHealthURL)
+	}
+	if h.indexerHealthURL != "" {
+		wg.Add(1)
+		go checkUpstream("indexer_service", h.indexerHealthURL)
+	}
+	wg.Wait()
+
+	status := "ok"
+	code := http.StatusOK
+	if !allOK {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":  status,
+		"version": version.Version,
+		"commit":  version.Commit,
+		"built":   version.BuildDate,
+		"checks":  checks,
+	})
+}
+
+// Health preserves backward compatibility with the original /api/v1/health endpoint.
+func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
+	h.Healthz(w, r)
+}
+
+func (h *Handlers) HealthDetail(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	type SubsystemCheck struct {
+		Name     string `json:"name"`
+		Status   string `json:"status"`
+		Error    string `json:"error,omitempty"`
+		Guidance string `json:"guidance,omitempty"`
+	}
+
+	checks := make([]SubsystemCheck, 0, 8)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	checkHTTP := func(name, healthURL, envVar string) {
+		defer wg.Done()
+		check := SubsystemCheck{Name: name, Status: "ok"}
+		if strings.TrimSpace(healthURL) == "" {
+			check.Status = "unconfigured"
+			check.Guidance = "Set " + envVar + " to enable this service"
+		} else {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL+"z", nil)
+			if err != nil {
+				check.Status = "error"
+				check.Error = err.Error()
+				check.Guidance = "Check " + envVar + " value"
+			} else {
+				resp, doErr := http.DefaultClient.Do(req)
+				if doErr != nil {
+					check.Status = "unreachable"
+					check.Error = doErr.Error()
+					check.Guidance = "Verify " + envVar + " is correct and the service is running"
+				} else {
+					resp.Body.Close()
+					if resp.StatusCode >= 300 {
+						check.Status = "degraded"
+						check.Error = fmt.Sprintf("status %d", resp.StatusCode)
+						check.Guidance = "Service responded with non-OK status; check its logs"
+					}
+				}
+			}
+		}
+		mu.Lock()
+		checks = append(checks, check)
+		mu.Unlock()
+	}
+
+	wg.Add(2)
+	go checkHTTP("metadata_service", h.metadataHealthURL, "METADATA_SERVICE_URL")
+	go checkHTTP("indexer_service", h.indexerHealthURL, "INDEXER_SERVICE_URL")
+
+	// Check download clients
+	if h.downloadMgr != nil {
+		for _, client := range h.downloadMgr.ListClients() {
+			if !client.Enabled {
+				continue
+			}
+			wg.Add(1)
+			go func(clientID, clientType string) {
+				defer wg.Done()
+				check := SubsystemCheck{Name: "download_client:" + clientID, Status: "ok"}
+				if h.downloadService != nil && !h.downloadService.HasClient(clientID) {
+					check.Status = "disconnected"
+					check.Error = "client not registered in download service"
+					check.Guidance = "Check " + strings.ToUpper(clientType) + " configuration"
+				}
+				mu.Lock()
+				checks = append(checks, check)
+				mu.Unlock()
+			}(client.ID, client.ClientType)
+		}
+	}
+
+	wg.Wait()
+
+	allOK := true
+	for _, c := range checks {
+		if c.Status != "ok" {
+			allOK = false
+			break
+		}
+	}
+	overall := "healthy"
+	if !allOK {
+		overall = "degraded"
+	}
+	writeJSON(w, map[string]any{
+		"status": overall,
+		"checks": checks,
+	})
+}
+
+func (h *Handlers) SystemStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	services := map[string]any{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	checkService := func(name, healthURL string) {
+		defer wg.Done()
+		info := map[string]any{"status": "ok"}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL+"z", nil)
+		if err != nil {
+			info["status"] = "unreachable"
+			info["error"] = err.Error()
+		} else {
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				info["status"] = "unreachable"
+				info["error"] = err.Error()
+			} else {
+				defer resp.Body.Close()
+				var body map[string]any
+				if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
+					if v, ok := body["version"]; ok {
+						info["version"] = v
+					}
+					if c, ok := body["commit"]; ok {
+						info["commit"] = c
+					}
+				}
+				if resp.StatusCode >= 300 {
+					info["status"] = fmt.Sprintf("status %d", resp.StatusCode)
+				}
+			}
+		}
+		mu.Lock()
+		services[name] = info
+		mu.Unlock()
+	}
+
+	if h.metadataHealthURL != "" {
+		wg.Add(1)
+		go checkService("metadata_service", h.metadataHealthURL)
+	}
+	if h.indexerHealthURL != "" {
+		wg.Add(1)
+		go checkService("indexer_service", h.indexerHealthURL)
+	}
+	wg.Wait()
+
+	libraryExists := false
+	if h.libraryRoot != "" {
+		if info, err := os.Stat(h.libraryRoot); err == nil && info.IsDir() {
+			libraryExists = true
+		}
+	}
+
+	var downloadClients []string
+	if h.downloadService != nil {
+		downloadClients = h.downloadService.ListClientNames()
+	}
+	if downloadClients == nil {
+		downloadClients = []string{}
+	}
+
+	writeJSON(w, map[string]any{
+		"version":          version.Version,
+		"commit":           version.Commit,
+		"built":            version.BuildDate,
+		"go_version":       runtime.Version(),
+		"startup_time":     h.startupTime.Format(time.RFC3339),
+		"services":         services,
+		"library_root":     h.libraryRoot,
+		"library_exists":   libraryExists,
+		"download_clients": downloadClients,
+	})
+}
+
+func (h *Handlers) TestDownloadClient(w http.ResponseWriter, r *http.Request) {
+	clientID := mux.Vars(r)["id"]
+	if clientID == "" {
+		writeError(w, "missing client id", http.StatusBadRequest)
+		return
+	}
+	if h.downloadService == nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "download service not configured"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if err := h.downloadService.TestConnection(ctx, clientID); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
@@ -573,10 +865,11 @@ func (h *Handlers) CreateDownloadFromGrab(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var body struct {
-		Client string `json:"client"`
+		Client        string `json:"client"`
+		UpgradeAction string `json:"upgrade_action"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	job, err := h.downloadMgr.EnqueueFromGrab(r.Context(), grabID, strings.TrimSpace(body.Client))
+	job, err := h.downloadMgr.EnqueueFromGrab(r.Context(), grabID, strings.TrimSpace(body.Client), strings.TrimSpace(body.UpgradeAction))
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadGateway)
 		return
@@ -896,4 +1189,15 @@ func writeError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func writeStructuredError(w http.ResponseWriter, code string, message string, guidance string, category string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":    code,
+		"message":  message,
+		"guidance": guidance,
+		"category": category,
+	})
 }

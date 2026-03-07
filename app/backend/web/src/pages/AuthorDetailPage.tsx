@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type LibraryItemsResponse = { items: Array<{ work_id: string; format?: string; path?: string }> }
 type WantedAuthorsResponse = { items: Array<{ author_id: string; enabled: boolean; profile_id?: string }> }
@@ -149,7 +150,7 @@ export function AuthorDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ['author-detail', 'wanted-authors', authorID] })
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'authors'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const searchMutation = useMutation({
@@ -159,7 +160,7 @@ export function AuthorDetailPage() {
       await postJSON('/ui-api/indexer/search/bulk', { items })
     },
     onSuccess: () => pushToast('Author searches queued'),
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const historyRows = useMemo(() => {
@@ -199,7 +200,7 @@ export function AuthorDetailPage() {
         subtitle={`Author ID: ${authorID}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!Boolean(monitored?.enabled))}>
+            <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!monitored?.enabled)}>
               {monitored?.enabled ? 'Unmonitor' : 'Monitor'}
             </button>
             <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => searchMutation.mutate()}>
@@ -267,7 +268,7 @@ export function AuthorDetailPage() {
                   <td className="px-3 py-2">{work.format}</td>
                   <td className="px-3 py-2">{work.hasFile ? <StatusBadge label="Has file" /> : <StatusBadge label="Missing" />}</td>
                   <td className="px-3 py-2">
-                    <button className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300" onClick={() => postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(work.workID)}`, { title: work.title }).then(() => pushToast('Search queued')).catch((error: unknown) => pushToast((error as Error).message))}>
+                    <button className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300" onClick={() => postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(work.workID)}`, { title: work.title }).then(() => pushToast('Search queued')).catch((error: unknown) => pushToast(errorMessage(error)))}>
                       Search
                     </button>
                   </td>

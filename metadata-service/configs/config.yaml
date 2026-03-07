@@ -10,12 +10,15 @@ api:
     requests_per_minute: 120
     burst: 20
 
+# Database connection — override via environment variables for production:
+#   DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME
+# The values below are dev-only defaults and must NOT be used in production.
 database:
   host: localhost
   port: 5432
-  user: metadata
-  password: metadata
-  dbname: metadata
+  user: bookwyrm_dev
+  password: changeme_dev_only
+  dbname: bookwyrm
 
 providers:
   dispatch_policy:

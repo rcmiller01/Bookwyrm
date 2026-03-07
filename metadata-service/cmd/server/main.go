@@ -19,6 +19,7 @@ import (
 	"metadata-service/internal/enrichment/handlers"
 	"metadata-service/internal/graph"
 	"metadata-service/internal/provider"
+	"metadata-service/internal/version"
 	"metadata-service/internal/provider/annasarchive"
 	"metadata-service/internal/provider/crossref"
 	"metadata-service/internal/provider/googlebooks"
@@ -35,6 +36,12 @@ import (
 func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+
+	log.Info().
+		Str("version", version.Version).
+		Str("commit", version.Commit).
+		Str("built", version.BuildDate).
+		Msg("starting bookwyrm metadata-service")
 
 	cfgPath := "configs/config.yaml"
 	if len(os.Args) > 1 {
@@ -278,6 +285,7 @@ func main() {
 		cfg.ProviderDispatchPolicy.Source,
 		cfg.ProviderDispatchPolicy.QuarantineMode,
 	)
+	handlers.SetDBPing(pool.Ping)
 	router := api.NewRouter(handlers, api.RouterOptions{
 		AuthEnabled:        cfg.API.Auth.Enabled,
 		APIKeys:            cfg.API.Auth.Keys,

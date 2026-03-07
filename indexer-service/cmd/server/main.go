@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"indexer-service/internal/api"
@@ -14,11 +16,14 @@ import (
 	mcpbackend "indexer-service/internal/indexer/backends/mcp"
 	prowlarrbackend "indexer-service/internal/indexer/backends/prowlarr"
 	"indexer-service/internal/mcp"
+	"indexer-service/internal/version"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
+	log.Printf("bookwyrm indexer-service version=%s commit=%s built=%s", version.Version, version.Commit, version.BuildDate)
+
 	listenAddr := envOrDefault("INDEXER_SERVICE_ADDR", ":8091")
 	prowlarrURL := os.Getenv("PROWLARR_BASE_URL")
 	prowlarrAPIKey := os.Getenv("PROWLARR_API_KEY")
@@ -28,7 +33,8 @@ func main() {
 	svc := indexer.NewService()
 	store, cleanup := initStorage(databaseDSN)
 	defer cleanup()
-	rootCtx := context.Background()
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
 	mcpRegistry := mcp.NewRegistry(store)
 	mcpRuntime := mcp.NewRuntime()
 	orchestrator := indexer.NewOrchestrator(store, strings.TrimSpace(envOrDefault("INDEXER_QUARANTINE_MODE", "last_resort")))
@@ -91,10 +97,30 @@ func main() {
 	h := api.NewHandlers(svc, store, orchestrator, mcpRegistry, mcpRuntime)
 	router := api.NewRouter(h)
 
-	log.Printf("indexer-service listening on %s", listenAddr)
-	if err := http.ListenAndServe(listenAddr, router); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:         listenAddr,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	go func() {
+		log.Printf("indexer-service listening on %s", listenAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("shutting down gracefully")
+	rootCancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = srv.Shutdown(shutdownCtx)
 }
 
 func initStorage(databaseDSN string) (indexer.Storage, func()) {

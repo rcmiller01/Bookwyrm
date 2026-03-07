@@ -8,6 +8,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { usePolling } from '../hooks/usePolling'
 import { fetchJSON, postNoContent } from '../lib/api'
+import { errorMessage } from '../lib/errorMessage'
 
 type DownloadJob = {
   id: number
@@ -69,7 +70,7 @@ export function QueuePage() {
       setCancelTarget(null)
       await queryClient.invalidateQueries({ queryKey: ['activity', 'queue'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
   const retryMutation = useMutation({
@@ -78,10 +79,10 @@ export function QueuePage() {
       pushToast('Download retried')
       await queryClient.invalidateQueries({ queryKey: ['activity', 'queue'] })
     },
-    onError: (error) => pushToast((error as Error).message)
+    onError: (error) => pushToast(errorMessage(error))
   })
 
-  const jobs = queueQuery.data?.items ?? []
+  const jobs = useMemo(() => queueQuery.data?.items ?? [], [queueQuery.data?.items])
 
   const filteredJobs = useMemo(() => {
     return jobs

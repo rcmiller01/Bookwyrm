@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,5 +101,36 @@ func TestRouterProxiesMetadataAndIndexerUIAPI(t *testing.T) {
 	}
 	if strings.TrimSpace(indexerRes.Body.String()) != "indexer-ok" {
 		t.Fatalf("unexpected indexer proxy body: %q", indexerRes.Body.String())
+	}
+}
+
+func TestProxyReturns502WhenUpstreamDown(t *testing.T) {
+	// Start a listener, get its address, then close it immediately so nothing is listening.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	deadAddr := "http://" + ln.Addr().String()
+	ln.Close()
+
+	h := NewHandlers(nil, nil, store.NewInMemoryWatchlistStore())
+	router := NewRouterWithConfig(h, RouterConfig{
+		MetadataProxyBaseURL: deadAddr,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ui-api/metadata/providers", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 when upstream is down, got %d", rec.Code)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !strings.Contains(body["error"], "unavailable") {
+		t.Fatalf("expected 'unavailable' in error body, got %q", body["error"])
 	}
 }

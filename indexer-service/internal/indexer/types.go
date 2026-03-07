@@ -29,6 +29,7 @@ type Candidate struct {
 	CandidateID     string         `json:"candidate_id"`
 	Title           string         `json:"title"`
 	NormalizedTitle string         `json:"normalized_title,omitempty"`
+	Fingerprint     string         `json:"fingerprint,omitempty"`
 	Format          string         `json:"format,omitempty"`
 	Protocol        string         `json:"protocol,omitempty"`
 	MatchConfidence float64        `json:"match_confidence"`
@@ -172,6 +173,7 @@ type CandidateRecord struct {
 type GrabRecord struct {
 	ID            int64     `json:"id"`
 	CandidateID   int64     `json:"candidate_id"`
+	Fingerprint   string    `json:"fingerprint,omitempty"`
 	EntityType    string    `json:"entity_type"`
 	EntityID      string    `json:"entity_id"`
 	Status        string    `json:"status"`
@@ -211,6 +213,7 @@ type ProfileRecord struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name"`
 	CutoffQuality  string    `json:"cutoff_quality"`
+	UpgradeAction  string    `json:"upgrade_action"`
 	DefaultProfile bool      `json:"default_profile"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`

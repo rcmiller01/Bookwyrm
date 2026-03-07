@@ -19,18 +19,19 @@ type Store struct {
 	nextCandidateID int64
 	nextGrabID      int64
 
-	backends        map[string]BackendRecord
-	mcpServers      map[string]MCPServerRecord
-	searchRequests  map[int64]SearchRequestRecord
-	requestKeyToID  map[string]int64
-	candidatesByReq map[int64][]CandidateRecord
-	candidateByID   map[int64]CandidateRecord
-	grabsByID       map[int64]GrabRecord
-	wantedWorks     map[string]WantedWorkRecord
-	wantedAuthors   map[string]WantedAuthorRecord
-	backendMetrics  map[string]indexerMetrics
-	profiles        map[string]ProfileRecord
-	profileQuality  map[string][]ProfileQualityRecord
+	backends            map[string]BackendRecord
+	mcpServers          map[string]MCPServerRecord
+	searchRequests      map[int64]SearchRequestRecord
+	requestKeyToID      map[string]int64
+	candidatesByReq     map[int64][]CandidateRecord
+	candidateByID       map[int64]CandidateRecord
+	grabsByID           map[int64]GrabRecord
+	grabsByFingerprint  map[string]int64 // fingerprint+entity_type+entity_id → grab ID
+	wantedWorks         map[string]WantedWorkRecord
+	wantedAuthors       map[string]WantedAuthorRecord
+	backendMetrics      map[string]indexerMetrics
+	profiles            map[string]ProfileRecord
+	profileQuality      map[string][]ProfileQualityRecord
 }
 
 type indexerMetrics struct {
@@ -50,10 +51,11 @@ func NewStore() *Store {
 		mcpServers:      map[string]MCPServerRecord{},
 		searchRequests:  map[int64]SearchRequestRecord{},
 		requestKeyToID:  map[string]int64{},
-		candidatesByReq: map[int64][]CandidateRecord{},
-		candidateByID:   map[int64]CandidateRecord{},
-		grabsByID:       map[int64]GrabRecord{},
-		wantedWorks:     map[string]WantedWorkRecord{},
+		candidatesByReq:    map[int64][]CandidateRecord{},
+		candidateByID:      map[int64]CandidateRecord{},
+		grabsByID:          map[int64]GrabRecord{},
+		grabsByFingerprint: map[string]int64{},
+		wantedWorks:        map[string]WantedWorkRecord{},
 		wantedAuthors:   map[string]WantedAuthorRecord{},
 		backendMetrics:  map[string]indexerMetrics{},
 		profiles: map[string]ProfileRecord{
@@ -61,6 +63,7 @@ func NewStore() *Store {
 				ID:             "default-ebook",
 				Name:           "Default Ebook",
 				CutoffQuality:  "epub",
+				UpgradeAction:  "ask",
 				DefaultProfile: true,
 				CreatedAt:      time.Now().UTC(),
 				UpdatedAt:      time.Now().UTC(),
@@ -407,6 +410,7 @@ func (s *Store) ReplaceCandidates(requestID int64, candidates []Candidate) ([]Ca
 	out := make([]CandidateRecord, 0, len(candidates))
 	now := time.Now().UTC()
 	for _, c := range candidates {
+		c.Fingerprint = ReleaseFingerprint(c)
 		rec := CandidateRecord{
 			ID:              s.nextCandidateID,
 			SearchRequestID: requestID,
@@ -450,13 +454,23 @@ func (s *Store) GetCandidateByID(id int64) (CandidateRecord, error) {
 func (s *Store) CreateGrab(candidateID int64, entityType string, entityID string) (GrabRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.candidateByID[candidateID]; !ok {
+	cand, ok := s.candidateByID[candidateID]
+	if !ok {
 		return GrabRecord{}, ErrNotFound
+	}
+	// Fingerprint dedup: if the same release was already grabbed for this entity, return existing.
+	fp := cand.Candidate.Fingerprint
+	if fp != "" {
+		fpKey := fp + "|" + entityType + "|" + entityID
+		if existingID, exists := s.grabsByFingerprint[fpKey]; exists {
+			return s.grabsByID[existingID], nil
+		}
 	}
 	now := time.Now().UTC()
 	rec := GrabRecord{
 		ID:          s.nextGrabID,
 		CandidateID: candidateID,
+		Fingerprint: fp,
 		EntityType:  entityType,
 		EntityID:    entityID,
 		Status:      "created",
@@ -465,6 +479,9 @@ func (s *Store) CreateGrab(candidateID int64, entityType string, entityID string
 	}
 	s.nextGrabID++
 	s.grabsByID[rec.ID] = rec
+	if fp != "" {
+		s.grabsByFingerprint[fp+"|"+entityType+"|"+entityID] = rec.ID
+	}
 	return rec, nil
 }
 
@@ -772,6 +789,9 @@ func (s *Store) UpsertProfile(profile ProfileRecord, qualities []ProfileQualityR
 	if strings.TrimSpace(profile.CutoffQuality) == "" {
 		profile.CutoffQuality = "epub"
 	}
+	if strings.TrimSpace(profile.UpgradeAction) == "" {
+		profile.UpgradeAction = "ask"
+	}
 	if profile.DefaultProfile {
 		for k, rec := range s.profiles {
 			rec.DefaultProfile = false
@@ -848,6 +868,10 @@ func (s *Store) defaultProfileIDLocked() string {
 		return id
 	}
 	return ""
+}
+
+func (s *Store) Ping() error {
+	return nil
 }
 
 func tierForReliability(score float64) DispatchTier {

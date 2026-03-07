@@ -11,11 +11,12 @@ import (
 )
 
 type Orchestrator struct {
-	store          Storage
-	backends       map[string]SearchBackend
-	quarantineMode string
-	candidateLimit int
-	once           sync.Once
+	store               Storage
+	backends            map[string]SearchBackend
+	quarantineMode      string
+	candidateLimit      int
+	maxEnqueuesPerTick  int
+	once                sync.Once
 }
 
 func NewOrchestrator(store Storage, quarantineMode string) *Orchestrator {
@@ -23,10 +24,11 @@ func NewOrchestrator(store Storage, quarantineMode string) *Orchestrator {
 		quarantineMode = "last_resort"
 	}
 	return &Orchestrator{
-		store:          store,
-		backends:       map[string]SearchBackend{},
-		quarantineMode: quarantineMode,
-		candidateLimit: 50,
+		store:              store,
+		backends:           map[string]SearchBackend{},
+		quarantineMode:     quarantineMode,
+		candidateLimit:     50,
+		maxEnqueuesPerTick: 5,
 	}
 }
 
@@ -35,6 +37,13 @@ func (o *Orchestrator) SetCandidateRetention(limit int) {
 		return
 	}
 	o.candidateLimit = limit
+}
+
+func (o *Orchestrator) SetMaxEnqueuesPerTick(n int) {
+	if n <= 0 {
+		return
+	}
+	o.maxEnqueuesPerTick = n
 }
 
 func (o *Orchestrator) RegisterBackend(backend SearchBackend, rec BackendRecord) {
@@ -179,7 +188,14 @@ func (o *Orchestrator) candidateCleanupWorker(ctx context.Context) {
 }
 
 func (o *Orchestrator) enqueueDueWanted(now time.Time) {
+	remaining := o.maxEnqueuesPerTick
+	if remaining <= 0 {
+		remaining = 5
+	}
 	for _, rec := range o.store.ListDueWantedWorks(now) {
+		if remaining <= 0 {
+			break
+		}
 		query := QuerySpec{
 			EntityType: "work",
 			EntityID:   rec.WorkID,
@@ -188,8 +204,12 @@ func (o *Orchestrator) enqueueDueWanted(now time.Time) {
 		query.Preferences.Languages = append([]string(nil), rec.Languages...)
 		o.Enqueue(query)
 		_ = o.store.MarkWantedWorkEnqueued(rec.WorkID, now)
+		remaining--
 	}
 	for _, rec := range o.store.ListDueWantedAuthors(now) {
+		if remaining <= 0 {
+			break
+		}
 		query := QuerySpec{
 			EntityType: "author",
 			EntityID:   rec.AuthorID,
@@ -198,6 +218,7 @@ func (o *Orchestrator) enqueueDueWanted(now time.Time) {
 		query.Preferences.Languages = append([]string(nil), rec.Languages...)
 		o.Enqueue(query)
 		_ = o.store.MarkWantedAuthorEnqueued(rec.AuthorID, now)
+		remaining--
 	}
 }
 
