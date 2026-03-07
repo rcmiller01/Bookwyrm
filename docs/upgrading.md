@@ -65,6 +65,8 @@ All checks should return `"status": "ok"`. The readyz endpoint returns 503 if an
 
 Open `http://localhost:8090` in your browser. The Dashboard footer shows the running version. The Status page shows version details for all services.
 
+Use `Status -> Support & Recovery -> Download Support Bundle` to capture a pre/post-upgrade diagnostics artifact.
+
 ## Rollback
 
 If something goes wrong after upgrading:
@@ -106,6 +108,7 @@ curl -s localhost:8090/api/v1/healthz | jq .
 - Database migrations run automatically on service startup (see [migrations.md](migrations.md) for details).
 - New migrations are forward-only in production. If you need to roll back a migration, restore from backup.
 - Always back up before upgrading, especially across major version bumps.
+- If migrations fail or services are degraded, capture a support bundle and review `system/migration-status.json` plus service health snapshots.
 
 ## Troubleshooting
 

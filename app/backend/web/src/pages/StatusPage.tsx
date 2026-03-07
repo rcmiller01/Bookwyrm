@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertBanner } from '../components/AlertBanner'
-import { fetchJSON } from '../lib/api'
+import { useToast } from '../components/ToastProvider'
+import { errorMessage } from '../lib/errorMessage'
+import { fetchJSON, postJSON } from '../lib/api'
 
 type Health = { status?: string }
 
@@ -29,6 +31,13 @@ type DownloadClientsResponse = {
   items?: { enabled: boolean; tier: string }[]
 }
 
+type ActionResponse = {
+  status?: string
+  queued?: number
+  retried?: number
+  failed?: number
+}
+
 function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
     <div className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
@@ -41,6 +50,9 @@ function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: 
 }
 
 export function StatusPage() {
+  const queryClient = useQueryClient()
+  const { pushToast } = useToast()
+
   const systemStatus = useQuery({
     queryKey: ['status', 'system-status'],
     queryFn: () => fetchJSON<SystemStatusResponse>('/api/v1/system/status'),
@@ -88,6 +100,46 @@ export function StatusPage() {
   const enabledClients = (clients.data?.items ?? []).filter((c) => c.enabled)
   const healthyClients = enabledClients.filter((c) => c.tier !== 'quarantine')
 
+  const runAction = useMutation({
+    mutationFn: async (path: string) => postJSON<ActionResponse>(path, {}),
+    onSuccess: async (data) => {
+      const summary = [data.retried ? `${data.retried} retried` : '', data.queued ? `${data.queued} queued` : '']
+        .filter(Boolean)
+        .join(', ')
+      pushToast(summary ? `Action completed (${summary})` : 'Action completed')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['status'] }),
+        queryClient.invalidateQueries({ queryKey: ['system', 'tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      ])
+    },
+    onError: (err) => pushToast(errorMessage(err))
+  })
+
+  async function downloadSupportBundle() {
+    try {
+      const response = await fetch('/api/v1/system/support-bundle', { method: 'GET' })
+      if (!response.ok) {
+        throw new Error(`Support bundle failed (${response.status})`)
+      }
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
+      const filename = filenameMatch?.[1] || `bookwyrm-support-${Date.now()}.zip`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      pushToast('Support bundle downloaded')
+    } catch (err) {
+      pushToast(errorMessage(err))
+    }
+  }
+
   return (
     <section className="space-y-4">
       <header>
@@ -96,6 +148,68 @@ export function StatusPage() {
       </header>
 
       <AlertBanner />
+
+      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
+        <h3 className="text-lg font-semibold text-slate-100">Support & Recovery</h3>
+        <p className="mt-1 text-sm text-slate-400">Download diagnostics and run safe one-click remediation actions.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className="rounded border border-sky-700 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-900/20"
+            onClick={downloadSupportBundle}
+          >
+            Download Support Bundle
+          </button>
+          <button
+            className="rounded border border-emerald-700 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/retry-failed-downloads')}
+          >
+            Retry Failed Downloads
+          </button>
+          <button
+            className="rounded border border-emerald-700 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/retry-failed-imports')}
+          >
+            Retry Failed Imports
+          </button>
+          <button
+            className="rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/test-connections')}
+          >
+            Test Connections
+          </button>
+          <button
+            className="rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/run-cleanup')}
+          >
+            Run Cleanup
+          </button>
+          <button
+            className="rounded border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/recompute-reliability')}
+          >
+            Recompute Reliability
+          </button>
+          <button
+            className="rounded border border-violet-700 px-3 py-1.5 text-xs text-violet-300 hover:bg-violet-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/rerun-wanted-searches')}
+          >
+            Rerun Wanted Searches
+          </button>
+          <button
+            className="rounded border border-violet-700 px-3 py-1.5 text-xs text-violet-300 hover:bg-violet-900/20 disabled:opacity-60"
+            disabled={runAction.isPending}
+            onClick={() => runAction.mutate('/api/v1/system/actions/rerun-enrichment')}
+          >
+            Rerun Enrichment
+          </button>
+        </div>
+      </div>
 
       {systemStatus.data?.version ? (
         <div className="rounded border border-slate-800 bg-slate-900/60 p-4">

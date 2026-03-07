@@ -22,6 +22,7 @@ const DownloadClientsPage = lazy(() => import('./pages/DownloadClientsPage').the
 const MetadataPage = lazy(() => import('./pages/MetadataPage').then(m => ({ default: m.MetadataPage })))
 const GeneralPage = lazy(() => import('./pages/GeneralPage').then(m => ({ default: m.GeneralPage })))
 const StatusPage = lazy(() => import('./pages/StatusPage').then(m => ({ default: m.StatusPage })))
+const SetupPage = lazy(() => import('./pages/SetupPage').then(m => ({ default: m.SetupPage })))
 const TasksPage = lazy(() => import('./pages/TasksPage').then(m => ({ default: m.TasksPage })))
 const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })))
@@ -59,6 +60,7 @@ export function App() {
           <Route path="/settings/metadata" element={<MetadataPage />} />
           <Route path="/settings/general" element={<GeneralPage />} />
           <Route path="/system/status" element={<StatusPage />} />
+          <Route path="/system/setup" element={<SetupPage />} />
           <Route path="/system/tasks" element={<TasksPage />} />
           <Route path="/system/logs" element={<LogsPage />} />
           <Route path="*" element={<PlaceholderPage title="Not Found" />} />

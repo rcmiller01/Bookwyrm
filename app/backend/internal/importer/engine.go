@@ -72,6 +72,28 @@ func (e *Engine) Start(ctx context.Context) {
 	e.startWorker(ctx, "cleanup-loop", e.cleanupLoop)
 }
 
+// RunMaintenance executes safe cleanup and reconciliation tasks on-demand.
+func (e *Engine) RunMaintenance(now time.Time) (map[string]int, error) {
+	incomingRemoved, incomingErr := e.cleanupIncoming(now)
+	trashRemoved, trashErr := e.cleanupTrash(now)
+	reconciled, reconcileErr := e.reconcileIncomingOrphans(now)
+	result := map[string]int{
+		"incoming_removed": incomingRemoved,
+		"trash_removed":    trashRemoved,
+		"reconciled":       reconciled,
+	}
+	if incomingErr != nil {
+		return result, incomingErr
+	}
+	if trashErr != nil {
+		return result, trashErr
+	}
+	if reconcileErr != nil {
+		return result, reconcileErr
+	}
+	return result, nil
+}
+
 func (e *Engine) startWorker(ctx context.Context, name string, fn func(context.Context)) {
 	go func() {
 		for {

@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- `GET /api/v1/system/support-bundle` endpoint producing a redacted diagnostics zip for support.
+- System remediation actions:
+  - `POST /api/v1/system/actions/retry-failed-downloads`
+  - `POST /api/v1/system/actions/retry-failed-imports`
+  - `POST /api/v1/system/actions/test-connections`
+  - `POST /api/v1/system/actions/run-cleanup`
+  - `POST /api/v1/system/actions/recompute-reliability`
+  - `POST /api/v1/system/actions/rerun-wanted-searches`
+  - `POST /api/v1/system/actions/rerun-enrichment`
+- Status page "Support & Recovery" controls for support bundle download and one-click remediation.
+- Operational docs:
+  - `docs/backup-restore.md`
+  - `docs/troubleshooting.md`
+  - `docs/docker-hybrid.md`
+  - `docs/windows-native.md`
+  - `docs/windows-installer.md`
+  - `docs/windows-service.md`
+  - `docs/windows-paths.md`
+  - `docs/postgres-hybrid.md`
+
 ## [0.18.0] - 2026-03-06
 
 ### Added

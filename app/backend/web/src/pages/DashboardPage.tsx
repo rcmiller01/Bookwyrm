@@ -43,6 +43,7 @@ type IndexerBackend = {
   tier: string
 }
 type IndexerBackendsResponse = { backends: IndexerBackend[] }
+type ReadinessResponse = { status: string; ready: boolean; blocking_count: number; warning_count: number }
 
 function StatCard({ label, value, subtitle }: { label: string; value: string | number; subtitle?: string }) {
   return (
@@ -114,6 +115,12 @@ export function DashboardPage() {
     refetchInterval: 10000
   })
 
+  const readinessQuery = useQuery({
+    queryKey: ['system', 'readiness'],
+    queryFn: () => fetchJSON<ReadinessResponse>('/api/v1/system/readiness'),
+    refetchInterval: 30000
+  })
+
   const downloadsInProgress = useMemo(() => {
     const statuses = new Set(['queued', 'submitted', 'downloading', 'repairing', 'unpacking'])
     return (downloadJobsQuery.data?.items ?? []).filter((item) => statuses.has((item.status || '').toLowerCase())).length
@@ -162,6 +169,19 @@ export function DashboardPage() {
           <p className="mt-1 text-sm text-sky-300/80">
             Complete the setup checklist below to get started. {checklistIncomplete} item{checklistIncomplete > 1 ? 's' : ''} remaining.
           </p>
+          <p className="mt-2">
+            <Link className="text-sm text-sky-300 underline hover:text-sky-200" to="/system/setup">
+              Open full setup checklist
+            </Link>
+          </p>
+        </div>
+      ) : null}
+      {readinessQuery.data && !readinessQuery.data.ready ? (
+        <div className="rounded border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-200">
+          Setup is not complete ({readinessQuery.data.blocking_count} blocking issue(s)).
+          <Link className="ml-2 underline hover:text-amber-100" to="/system/setup">
+            Review setup checklist
+          </Link>
         </div>
       ) : null}
 

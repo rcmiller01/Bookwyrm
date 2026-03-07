@@ -61,6 +61,7 @@ Versions are globally unique within each service. The indexer-service starts at 
 - All services track applied migrations in a `schema_migrations` table within their respective database.
 - Migrations are idempotent: only unapplied migrations execute.
 - Each migration runs inside a database transaction with automatic rollback on failure.
+- Runtime migration visibility is surfaced through system diagnostics (Status page + support bundle export).
 
 ## Backup and Restore
 

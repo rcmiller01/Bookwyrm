@@ -22,10 +22,10 @@ import (
 	"app-backend/internal/integration/download"
 	"app-backend/internal/integration/indexer"
 	"app-backend/internal/integration/metadata"
-	"app-backend/internal/version"
 	"app-backend/internal/jobs"
 	"app-backend/internal/pipeline"
 	"app-backend/internal/store"
+	"app-backend/internal/version"
 
 	"github.com/gorilla/mux"
 )
@@ -43,6 +43,8 @@ type Handlers struct {
 	domainPack        contract.Domain
 	importer          *pipeline.ImporterPipeline
 	renamer           *pipeline.RenamerPipeline
+	metadataBaseURL   string
+	indexerBaseURL    string
 	metadataHealthURL string
 	indexerHealthURL  string
 	startupTime       time.Time
@@ -112,6 +114,8 @@ func (h *Handlers) SetDownloadService(svc *download.Service) {
 }
 
 func (h *Handlers) SetUpstreamURLs(metadataBaseURL, indexerBaseURL string) {
+	h.metadataBaseURL = strings.TrimRight(strings.TrimSpace(metadataBaseURL), "/")
+	h.indexerBaseURL = strings.TrimRight(strings.TrimSpace(indexerBaseURL), "/")
 	h.metadataHealthURL = strings.TrimRight(metadataBaseURL, "/") + "/health"
 	h.indexerHealthURL = strings.TrimRight(indexerBaseURL, "/") + "/v1/indexer/health"
 }

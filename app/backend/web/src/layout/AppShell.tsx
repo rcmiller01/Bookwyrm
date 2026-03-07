@@ -1,6 +1,8 @@
 import { KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
+import { fetchJSON } from '../lib/api'
 
 type NavItem = {
   section: string
@@ -12,6 +14,13 @@ type SearchResult = {
   title: string
   subtitle: string
   kind: 'book' | 'author'
+}
+
+type ReadinessResponse = {
+  status: string
+  ready: boolean
+  blocking_count: number
+  warning_count: number
 }
 
 const navItems: NavItem[] = [
@@ -53,6 +62,7 @@ const navItems: NavItem[] = [
   {
     section: 'System',
     items: [
+      { label: 'Setup', path: '/system/setup' },
       { label: 'Status', path: '/system/status' },
       { label: 'Tasks', path: '/system/tasks' },
       { label: 'Logs', path: '/system/logs' }
@@ -68,6 +78,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [results, setResults] = useState<SearchResult[]>([])
   const [open, setOpen] = useState(false)
   const [recentSearches, setRecentSearches] = useLocalStorageState<string[]>('ui.search.recent', [])
+  const readinessQuery = useQuery({
+    queryKey: ['system', 'readiness'],
+    queryFn: () => fetchJSON<ReadinessResponse>('/api/v1/system/readiness'),
+    refetchInterval: 30000
+  })
   const searchRef = useRef<HTMLInputElement>(null)
   const activeAbort = useRef<AbortController | null>(null)
 
@@ -233,6 +248,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
       <main className="flex-1 p-3 md:p-6">
+        {readinessQuery.data && !readinessQuery.data.ready ? (
+          <div className="mb-3 rounded border border-amber-800/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+            System is in {readinessQuery.data.status.replace(/_/g, ' ')} mode. {readinessQuery.data.blocking_count} blocking issue(s), {readinessQuery.data.warning_count} warning(s).{' '}
+            <NavLink className="underline hover:text-amber-100" to="/system/setup">
+              Open Setup Checklist
+            </NavLink>
+          </div>
+        ) : null}
         <div className="mb-3 flex items-center justify-between md:hidden">
           <button
             className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300"

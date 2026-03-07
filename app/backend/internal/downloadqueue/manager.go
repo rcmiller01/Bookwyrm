@@ -74,11 +74,11 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 		upgradeAction = "ask"
 	}
 	job, err := m.store.CreateJob(Job{
-		GrabID:      grab.ID,
-		CandidateID: grab.CandidateID,
-		WorkID:      grab.EntityID,
-		Protocol:    protocol,
-		ClientName:  clientName,
+		GrabID:        grab.ID,
+		CandidateID:   grab.CandidateID,
+		WorkID:        grab.EntityID,
+		Protocol:      protocol,
+		ClientName:    clientName,
 		UpgradeAction: upgradeAction,
 		RequestPayload: map[string]any{
 			"uri":      uri,
@@ -196,6 +196,10 @@ func (m *Manager) RetryJob(id int64) error {
 		Data:      map[string]any{"download_job_id": id},
 	})
 	return nil
+}
+
+func (m *Manager) RecomputeReliability() error {
+	return m.store.RecomputeClientReliability()
 }
 
 func (m *Manager) submitWorker(ctx context.Context) {
