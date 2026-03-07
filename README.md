@@ -49,7 +49,12 @@ Screenshots are published in alpha release notes and docs once each tagged alpha
 
 ### Windows (Recommended)
 
-1. Download `bookwyrm-<version>-setup.exe` from releases.
+Downloads:
+
+- [Latest release downloads](https://github.com/rcmiller01/Bookwyrm/releases/latest)
+- [v0.1.0-alpha release](https://github.com/rcmiller01/Bookwyrm/releases/tag/v0.1.0-alpha)
+
+1. Download `bookwyrm-<version>-setup.exe` from Releases.
 2. Run installer and keep default paths unless you have a specific reason to change.
 3. Open `http://localhost:8090` (opened automatically on first successful startup).
 4. Complete the setup checklist in the UI.
