@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Telemetry-free diagnostics counters endpoint:
   - `GET /v1/indexer/stats` (searches executed, candidates evaluated, grabs performed)
   - `GET /api/v1/system/stats` (aggregated search/candidate/grab/download/import counters)
+- Expanded Phase 23 alpha validation matrix with environment-specific gates and RC signoff checklist (`docs/alpha-validation.md`).
 - Phase 22 alpha-release documentation set:
   - README overhaul with project overview, architecture, install, troubleshooting, and development sections.
   - `docs/release-workflow.md`

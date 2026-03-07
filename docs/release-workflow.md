@@ -34,6 +34,7 @@ git push origin v0.1.0-alpha
    - install on clean Windows VM
    - run setup checklist
    - validate status/readiness endpoints
+   - complete Phase 23 matrix in [alpha-validation.md](alpha-validation.md)
 
 ## Rollback Discipline
 

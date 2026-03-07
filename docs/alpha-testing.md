@@ -2,6 +2,8 @@
 
 This guide is for external alpha testers validating end-to-end behavior.
 
+Primary operator checklist: [alpha-validation.md](alpha-validation.md).
+
 ## What To Test
 
 - Setup flow (first-run checklist and dependency readiness)
