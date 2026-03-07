@@ -3,6 +3,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0-alpha"
 #endif
+#ifndef SourceRoot
+  #define SourceRoot "."
+#endif
 #define MyPublisher "Bookwyrm"
 #define MyExeName "bookwyrm-launcher.exe"
 
@@ -35,12 +38,12 @@ Name: "{app}\logs"
 Name: "{app}\data"
 
 [Files]
-Source: "bin\bookwyrm-launcher.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "bin\metadata-service.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "bin\indexer-service.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "bin\backend.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "config\bookwyrm.env"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
-Source: "config\metadata-service.yaml"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
+Source: "{#SourceRoot}\bin\bookwyrm-launcher.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#SourceRoot}\bin\metadata-service.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#SourceRoot}\bin\indexer-service.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#SourceRoot}\bin\backend.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#SourceRoot}\config\bookwyrm.env"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
+Source: "{#SourceRoot}\config\metadata-service.yaml"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
 
 [Run]
 Filename: "{app}\bin\bookwyrm-launcher.exe"; Parameters: "install-service --base-dir ""{app}"""; Flags: runhidden; Tasks: installservice

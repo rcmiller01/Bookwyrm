@@ -89,7 +89,7 @@ Copy-Item (Join-Path $stageBin "*") (Join-Path $issStage "bin") -Recurse
 Copy-Item (Join-Path $stageConfig "*") (Join-Path $issStage "config") -Recurse
 
 Push-Location $issStage
-& $iscc.Source "/DMyAppVersion=$Version" $issScript | Out-Host
+& $iscc.Source "/DMyAppVersion=$Version" "/DSourceRoot=$issStage" "/O$issStage" $issScript | Out-Host
 Pop-Location
 
 $generatedSetup = Join-Path $issStage ("bookwyrm-{0}-setup.exe" -f $Version)
