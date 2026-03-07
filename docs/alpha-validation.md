@@ -2,11 +2,11 @@
 
 This document is the operational validation gate for alpha candidates.
 
-Goal: prove Bookwyrm works outside the dev machine across installer, launcher/service lifecycle, pipeline behavior, failure recovery, scale, and supportability.
+Goal: prove Bookwyrm works outside the dev machine across zip distribution, launcher/service lifecycle, pipeline behavior, failure recovery, scale, and supportability.
 
 ## Scope
 
-- Installer behavior
+- Zip extraction/setup behavior
 - Launcher and service behavior
 - Startup and readiness correctness
 - End-to-end media pipeline
@@ -26,19 +26,19 @@ Goal: prove Bookwyrm works outside the dev machine across installer, launcher/se
 
 ## Slice A: Clean Install Validation
 
-### A1) Installer Validation
+### A1) Zip Validation
 
 Steps:
 
-1. Run installer on Environment A.
+1. Extract `bookwyrm-<version>-windows.zip` on Environment A.
 2. Confirm folders are created (`bin`, `config`, `logs`, `data`).
-3. Confirm launcher/service installed when selected.
-4. Confirm browser opens on first successful startup.
-5. Confirm setup wizard/checklist appears.
+3. Start launcher using `bookwyrm-launcher.exe run --base-dir <extract-path>`.
+4. Confirm setup wizard/checklist appears.
+
 
 Expected:
 
-- No CLI/manual edits required to reach first-run UI.
+- Setup is possible from extracted files and config templates.
 - UI reachable at `http://localhost:8090`.
 - Logs/config files present.
 
@@ -272,15 +272,14 @@ Alpha candidate requires all of:
 - Support bundle validation passes
 - Service restart/reboot recovery verified
 - Automated tests green
-- Release artifacts produced:
+- Release artifact produced:
   - zip
-  - installer (when tooling available)
 
 ## Suggested Validation Matrix
 
 | Area | Test | Env A | Env B | Env C | Pass Criteria |
 |---|---|---|---|---|---|
-| Install | Installer runs cleanly | ☐ | ☐ | — | UI opens, checklist visible |
+| Install | Zip extraction + startup | ☐ | ☐ | — | UI opens, checklist visible |
 | Launcher | Startup + readiness | ☐ | ☐ | ☐ | Ready within timeout or actionable failure |
 | Metadata | Search + graph + recs | ☐ | ☐ | ☐ | Accurate enough for use |
 | Search | Manual search + grab | ☐ | ☐ | ☐ | One grab, no duplicates |
@@ -303,3 +302,4 @@ For each validation run, capture:
 - Notes:
 - Support bundle attached (Y/N):
 - Final result (`pass`/`fail`):
+

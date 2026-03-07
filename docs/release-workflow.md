@@ -27,7 +27,6 @@ git push origin v0.1.0-alpha
    - title: `v0.1.0-alpha`
    - include changelog highlights
    - attach artifacts:
-     - `bookwyrm-0.1.0-alpha-setup.exe`
      - `bookwyrm-0.1.0-alpha-windows.zip`
 
 6. Post-release checks:

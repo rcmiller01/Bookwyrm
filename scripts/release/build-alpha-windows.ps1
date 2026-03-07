@@ -71,32 +71,4 @@ if (Test-Path $zipPath) {
 }
 Compress-Archive -Path (Join-Path $stageRoot "*") -DestinationPath $zipPath
 Write-Host "Created zip artifact: $zipPath"
-
-$issScript = Join-Path $repoRoot "launcher\packaging\windows\bookwyrm.iss"
-$iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
-if ($null -eq $iscc) {
-    Write-Warning "Inno Setup compiler (iscc.exe) not found; skipping installer build."
-    Write-Warning "Install Inno Setup and rerun to produce setup.exe."
-    exit 0
-}
-
-$issStage = Join-Path $outputRoot "iss-stage"
-Remove-Item -Recurse -Force $issStage -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $issStage | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $issStage "bin") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $issStage "config") | Out-Null
-Copy-Item (Join-Path $stageBin "*") (Join-Path $issStage "bin") -Recurse
-Copy-Item (Join-Path $stageConfig "*") (Join-Path $issStage "config") -Recurse
-
-Push-Location $issStage
-& $iscc.Source "/DMyAppVersion=$Version" "/DSourceRoot=$issStage" "/O$issStage" $issScript | Out-Host
-Pop-Location
-
-$generatedSetup = Join-Path $issStage ("bookwyrm-{0}-setup.exe" -f $Version)
-$finalSetup = Join-Path $outputRoot ("bookwyrm-{0}-setup.exe" -f $Version)
-if (Test-Path $generatedSetup) {
-    Move-Item -Force $generatedSetup $finalSetup
-    Write-Host "Created installer artifact: $finalSetup"
-} else {
-    throw "Expected installer not found at $generatedSetup"
-}
+Write-Warning "Installer (.exe) packaging is intentionally disabled for open alpha distribution."

@@ -18,11 +18,11 @@ Primary operator checklist: [alpha-validation.md](alpha-validation.md).
 
 - UX polish and visual consistency are still in progress.
 - Some provider/indexer combinations may require manual tuning.
-- Windows installer flow is prioritized; other packaging modes may evolve faster than docs.
+- Windows zip distribution is the supported alpha packaging path.
 
 ## Recommended Validation Sequence
 
-1. Install Bookwyrm and complete first-run checklist.
+1. Extract the Windows zip and start Bookwyrm, then complete first-run checklist.
 2. Add one metadata provider, one search backend, one download client.
 3. Monitor a small set of authors/books.
 4. Trigger search/manual search and grab one release.

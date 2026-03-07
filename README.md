@@ -8,7 +8,7 @@ Bookwyrm exists to provide an Arr-style experience for books with stronger expla
 
 - Reliable long-running automation across metadata, search, download, and import stages
 - Modular services with clear boundaries for easier debugging and upgrades
-- Windows-native launcher + installer flow for non-technical users
+- Windows-native launcher flow with zip distribution
 - Flexible search pipelines (Prowlarr and direct providers)
 - Transparent scoring and review workflows for low-confidence imports
 
@@ -18,7 +18,7 @@ Bookwyrm exists to provide an Arr-style experience for books with stronger expla
 - Explainable candidate scoring and recommendation reasons surfaced in UI
 - Reliability/tier-aware provider and backend routing
 - Built-in support bundle export and remediation actions for supportability
-- Native Windows launcher/service/installer target from day one
+- Native Windows launcher/service target from day one
 
 ## Key Features
 
@@ -49,10 +49,16 @@ Screenshots are published in alpha release notes and docs once each tagged alpha
 
 ### Windows (Recommended)
 
-1. Download `bookwyrm-<version>-setup.exe` from releases.
-2. Run installer and keep default paths unless you have a specific reason to change.
-3. Open `http://localhost:8090` (opened automatically on first successful startup).
-4. Complete the setup checklist in the UI.
+Downloads:
+
+- [Latest release downloads](https://github.com/rcmiller01/Bookwyrm/releases/latest)
+- [v0.1.0-alpha release](https://github.com/rcmiller01/Bookwyrm/releases/tag/v0.1.0-alpha)
+
+1. Download `bookwyrm-<version>-windows.zip` from Releases.
+2. Extract to a stable folder (example: `C:\ProgramData\Bookwyrm`).
+3. Copy `config\bookwyrm.env` and `config\metadata-service.yaml` from the zip and set values for your environment.
+4. Run `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`.
+5. Open `http://localhost:8090` and complete the setup checklist.
 
 Recommended DB mode for Windows alpha: native Bookwyrm + Postgres in Docker Desktop (hybrid).
 
