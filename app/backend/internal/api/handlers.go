@@ -364,15 +364,17 @@ func (h *Handlers) SystemStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{
-		"version":          version.Version,
-		"commit":           version.Commit,
-		"built":            version.BuildDate,
-		"go_version":       runtime.Version(),
-		"startup_time":     h.startupTime.Format(time.RFC3339),
-		"services":         services,
-		"library_root":     h.libraryRoot,
-		"library_exists":   libraryExists,
-		"download_clients": downloadClients,
+		"version":            version.Version,
+		"commit":             version.Commit,
+		"built":              version.BuildDate,
+		"go_version":         runtime.Version(),
+		"startup_time":       h.startupTime.Format(time.RFC3339),
+		"services":           services,
+		"dependency_summary": h.computeDependencySummary(ctx),
+		"migration_status":   h.computeMigrationStatus(ctx),
+		"library_root":       h.libraryRoot,
+		"library_exists":     libraryExists,
+		"download_clients":   downloadClients,
 	})
 }
 

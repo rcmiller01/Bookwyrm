@@ -22,4 +22,18 @@ Adjust DB names per service where needed.
 - Monitor free disk on Docker data volume.
 - Take backups before upgrades.
 - Validate `readyz` after restarts.
+- Validate `GET /api/v1/system/dependencies` returns `can_function_now=true`.
+- Validate `GET /api/v1/system/migration-status` is `ok` before and after upgrades.
 
+## Troubleshooting quick hits
+
+- `pq: password authentication failed`:
+  - verify DSN credentials
+  - reset password/user grants in Postgres
+- `connection refused`:
+  - confirm Docker Desktop is running
+  - check Postgres port mapping (`5432`)
+- migrations pending after upgrade:
+  - check service startup logs
+  - inspect `/api/v1/system/migration-status`
+  - restore backup if migration failed irrecoverably

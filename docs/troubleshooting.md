@@ -3,18 +3,21 @@
 ## First checks
 
 1. Open `Status` page and resolve degraded checks.
-2. Run `Support & Recovery` actions:
+2. Check `GET /api/v1/system/dependencies` and confirm `can_function_now=true`.
+3. Check `GET /api/v1/system/migration-status` and confirm migrations are not pending/failed.
+4. Run `Support & Recovery` actions:
    - `Test Connections`
    - `Retry Failed Downloads`
    - `Retry Failed Imports`
    - `Run Cleanup`
-3. Download a support bundle and attach it to bug reports.
+5. Download a support bundle and attach it to bug reports.
 
 ## Common issues
 
 ### `readyz` is degraded
 
 - Check `Status` page service rows.
+- Check backend startup logs for `startup warning:` entries (metadata/indexer/DB/download clients).
 - Confirm service URLs:
   - `METADATA_SERVICE_URL`
   - `INDEXER_SERVICE_URL`
@@ -50,4 +53,3 @@
   - backend log
   - indexer log
   - metadata log
-

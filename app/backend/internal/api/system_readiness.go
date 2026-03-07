@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +10,17 @@ import (
 	"strings"
 	"time"
 )
+
+var pingDatabaseDSN = func(ctx context.Context, dsn string) error {
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return db.PingContext(pingCtx)
+}
 
 type readinessItem struct {
 	Key      string `json:"key"`
@@ -201,25 +213,46 @@ func (h *Handlers) SystemReadiness(w http.ResponseWriter, r *http.Request) {
 		Route:    "/settings/download-clients",
 	})
 
-	databaseConfigured := strings.TrimSpace(os.Getenv("DATABASE_DSN")) != ""
+	databaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN"))
+	databaseConfigured := databaseDSN != ""
+	databaseReady := false
+	databaseDetail := "DATABASE_DSN is not configured"
+	if databaseConfigured {
+		if err := pingDatabaseDSN(ctx, databaseDSN); err != nil {
+			databaseDetail = err.Error()
+		} else {
+			databaseReady = true
+			databaseDetail = "postgres reachable"
+		}
+	}
 	addItem(readinessItem{
-		Key:      "database_dsn_configured",
-		Label:    "Database DSN configured",
-		Ready:    databaseConfigured,
-		Blocking: false,
-		Detail:   map[bool]string{true: "configured", false: "not configured (in-memory fallback)"}[databaseConfigured],
-		Guidance: "Set DATABASE_DSN for persistent queue/import state across restarts.",
+		Key:      "database_ready",
+		Label:    "Database ready",
+		Ready:    databaseReady,
+		Blocking: true,
+		Detail:   databaseDetail,
+		Guidance: "Configure DATABASE_DSN to a reachable Postgres instance.",
 		Route:    "/system/status",
 	})
 
+	migrationStatus := h.computeMigrationStatus(ctx)
+	migrationState := strings.TrimSpace(fmt.Sprintf("%v", migrationStatus["status"]))
+	migrationReady, _ := migrationStatus["ready"].(bool)
+	migrationItemStatus := "warning"
+	switch migrationState {
+	case "ok":
+		migrationItemStatus = "ok"
+	case "failed":
+		migrationItemStatus = "blocking"
+	}
 	addItem(readinessItem{
-		Key:      "migration_visibility",
-		Label:    "Migration visibility",
-		Ready:    false,
-		Blocking: false,
-		Status:   "warning",
-		Detail:   "runtime migration introspection is not yet fully exposed",
-		Guidance: "Use service logs + support bundle migration-status snapshot when diagnosing upgrade issues.",
+		Key:      "migrations_applied",
+		Label:    "Database migrations applied",
+		Ready:    migrationReady,
+		Blocking: migrationState == "failed",
+		Status:   migrationItemStatus,
+		Detail:   fmt.Sprintf("%v", migrationStatus["detail"]),
+		Guidance: "Apply pending migrations before upgrading further. Check docs/migrations.md and support bundle migration-status.",
 		Route:    "/system/status",
 	})
 
@@ -244,11 +277,12 @@ func (h *Handlers) SystemReadiness(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{
-		"status":         status,
-		"ready":          blockingCount == 0,
-		"blocking_count": blockingCount,
-		"warning_count":  warningCount,
-		"items":          items,
-		"generated_at":   time.Now().UTC().Format(time.RFC3339),
+		"status":           status,
+		"ready":            blockingCount == 0,
+		"can_function_now": blockingCount == 0,
+		"blocking_count":   blockingCount,
+		"warning_count":    warningCount,
+		"items":            items,
+		"generated_at":     time.Now().UTC().Format(time.RFC3339),
 	})
 }

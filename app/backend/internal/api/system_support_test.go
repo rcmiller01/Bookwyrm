@@ -55,6 +55,12 @@ func TestSupportBundle_GeneratesZipAndRedactsSecrets(t *testing.T) {
 	if _, ok := entries["system/config-summary.json"]; !ok {
 		t.Fatalf("missing config summary entry")
 	}
+	if _, ok := entries["system/readyz.json"]; !ok {
+		t.Fatalf("missing readyz entry")
+	}
+	if _, ok := entries["system/dependencies.json"]; !ok {
+		t.Fatalf("missing dependencies entry")
+	}
 	logBody, ok := entries["logs/bookwyrm.log"]
 	if !ok {
 		t.Fatalf("missing log entry")

@@ -5,7 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
-import { fetchJSON, postNoContent } from '../lib/api'
+import { fetchJSON, postJSON, postNoContent } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
 
 type ProviderInfo = {
@@ -20,6 +20,7 @@ type ProviderInfo = {
 }
 
 type ProvidersResponse = { providers: ProviderInfo[] }
+type ConnectionTestResponse = { status?: string }
 
 function tierFromReliability(provider: ProviderInfo): 'gold' | 'silver' | 'bronze' {
   if (provider.failure_count === 0 && provider.avg_latency_ms <= 500) return 'gold'
@@ -60,6 +61,13 @@ export function MetadataPage() {
       return row.name.toLowerCase().includes(lowered) || row.status.toLowerCase().includes(lowered)
     })
   }, [providersQuery.data?.providers, query])
+  const enabledProviders = (providersQuery.data?.providers ?? []).filter((provider) => provider.enabled)
+
+  const testConnections = useMutation({
+    mutationFn: () => postJSON<ConnectionTestResponse>('/api/v1/system/actions/test-connections', {}),
+    onSuccess: () => pushToast('Connection tests completed'),
+    onError: (error) => pushToast(errorMessage(error))
+  })
 
   return (
     <section className="space-y-4">
@@ -67,11 +75,22 @@ export function MetadataPage() {
         title="Metadata Providers"
         subtitle="Provider reliability, tiering, and routing hints for metadata enrichment."
         actions={
-          <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void providersQuery.refetch()}>
-            Test/Refresh
-          </button>
+          <div className="flex gap-2">
+            <button className="rounded border border-amber-700 px-3 py-1.5 text-sm text-amber-300" disabled={testConnections.isPending} onClick={() => testConnections.mutate()}>
+              {testConnections.isPending ? 'Testing...' : 'Test Connections'}
+            </button>
+            <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void providersQuery.refetch()}>
+              Refresh
+            </button>
+          </div>
         }
       />
+
+      {enabledProviders.length === 0 ? (
+        <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">
+          No metadata providers are enabled. Enable at least one provider to fetch book metadata and recommendations.
+        </div>
+      ) : null}
 
       <FilterBar>
         <input

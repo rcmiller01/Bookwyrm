@@ -5,7 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
-import { fetchJSON, postNoContent } from '../lib/api'
+import { fetchJSON, postJSON, postNoContent } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
 
 type BackendRecord = {
@@ -19,6 +19,7 @@ type BackendRecord = {
 }
 
 type BackendsResponse = { backends: BackendRecord[] }
+type ConnectionTestResponse = { status?: string }
 
 function preferred(rec: BackendRecord): boolean {
   return Boolean(rec.config_json?.preferred)
@@ -70,6 +71,13 @@ export function IndexersPage() {
       return row.name.toLowerCase().includes(lowered) || row.id.toLowerCase().includes(lowered)
     })
   }, [backendsQuery.data?.backends, query])
+  const enabledBackends = (backendsQuery.data?.backends ?? []).filter((b) => b.enabled)
+
+  const testConnections = useMutation({
+    mutationFn: () => postJSON<ConnectionTestResponse>('/api/v1/system/actions/test-connections', {}),
+    onSuccess: () => pushToast('Connection tests completed'),
+    onError: (error) => pushToast(errorMessage(error))
+  })
 
   return (
     <section className="space-y-4">
@@ -77,11 +85,22 @@ export function IndexersPage() {
         title="Indexers"
         subtitle="Preferred sources, backend reliability, and staged search controls."
         actions={
-          <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void backendsQuery.refetch()}>
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <button className="rounded border border-amber-700 px-3 py-1.5 text-sm text-amber-300" disabled={testConnections.isPending} onClick={() => testConnections.mutate()}>
+              {testConnections.isPending ? 'Testing...' : 'Test Connections'}
+            </button>
+            <button className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" onClick={() => void backendsQuery.refetch()}>
+              Refresh
+            </button>
+          </div>
         }
       />
+
+      {enabledBackends.length === 0 ? (
+        <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">
+          No search backends are enabled. Enable at least one backend to make wanted/search workflows operational.
+        </div>
+      ) : null}
 
       <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
         Ordering rule: preferred backends run first, then tier/reliability/priority.

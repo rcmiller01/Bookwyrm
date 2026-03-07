@@ -13,6 +13,18 @@ type SystemStatusResponse = {
   go_version?: string
   startup_time?: string
   services?: Record<string, { status?: string; version?: string; commit?: string }>
+  dependency_summary?: {
+    status?: string
+    can_function_now?: boolean
+    blocking_count?: number
+    warning_count?: number
+  }
+  migration_status?: {
+    status?: string
+    ready?: boolean
+    detail?: string
+    pending_count?: number
+  }
   library_root?: string
   library_exists?: boolean
   download_clients?: string[]
@@ -50,6 +62,7 @@ function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: 
 }
 
 export function StatusPage() {
+  const upgradeNotesURL = 'https://github.com/rcmiller01/Bookwyrm/blob/main/docs/upgrading.md'
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
 
@@ -99,6 +112,11 @@ export function StatusPage() {
   const healthyBackends = enabledBackends.filter((b) => b.tier !== 'quarantine')
   const enabledClients = (clients.data?.items ?? []).filter((c) => c.enabled)
   const healthyClients = enabledClients.filter((c) => c.tier !== 'quarantine')
+  const migration = systemStatus.data?.migration_status
+  const migrationPending = (migration?.status || '').toLowerCase() === 'pending'
+  const migrationFailed = (migration?.status || '').toLowerCase() === 'failed'
+  const dependencies = systemStatus.data?.dependency_summary
+  const degradedMode = dependencies?.can_function_now === false
 
   const runAction = useMutation({
     mutationFn: async (path: string) => postJSON<ActionResponse>(path, {}),
@@ -149,9 +167,23 @@ export function StatusPage() {
 
       <AlertBanner />
 
+      {degradedMode ? (
+        <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">
+          Degraded mode: {dependencies?.blocking_count ?? 0} blocking dependency issue(s) detected. Resolve setup items in System Setup before normal operation.
+        </div>
+      ) : null}
+
+      {migrationPending || migrationFailed ? (
+        <div className="rounded border border-amber-800/60 bg-amber-950/40 p-3 text-sm text-amber-200">
+          <p className="font-medium">{migrationFailed ? 'Migration check failed' : 'Pending migrations detected'}</p>
+          <p className="mt-1">{migration?.detail || 'Migration state requires attention before continuing upgrades.'}</p>
+        </div>
+      ) : null}
+
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
         <h3 className="text-lg font-semibold text-slate-100">Support & Recovery</h3>
         <p className="mt-1 text-sm text-slate-400">Download diagnostics and run safe one-click remediation actions.</p>
+        <p className="mt-1 text-xs text-amber-300/90">Backup reminder: take a DB backup before upgrade remediation or cleanup operations.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             className="rounded border border-sky-700 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-900/20"
@@ -213,7 +245,12 @@ export function StatusPage() {
 
       {systemStatus.data?.version ? (
         <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-lg font-semibold text-slate-100">Version Info</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-100">Version Info</h3>
+            <a className="text-xs text-sky-300 underline hover:text-sky-200" href={upgradeNotesURL} rel="noreferrer" target="_blank">
+              Upgrade notes
+            </a>
+          </div>
           <div className="mt-3 grid gap-2 md:grid-cols-3 text-sm">
             <div className="rounded border border-slate-800 bg-slate-900/40 px-3 py-2">
               <p className="text-slate-400">Backend</p>

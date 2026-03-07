@@ -64,6 +64,7 @@ All checks should return `"status": "ok"`. The readyz endpoint returns 503 if an
 ### 5. Verify the UI
 
 Open `http://localhost:8090` in your browser. The Dashboard footer shows the running version. The Status page shows version details for all services.
+Also verify migration state via `GET /api/v1/system/migration-status` (or Status page migration warnings) before post-upgrade actions.
 
 Use `Status -> Support & Recovery -> Download Support Bundle` to capture a pre/post-upgrade diagnostics artifact.
 

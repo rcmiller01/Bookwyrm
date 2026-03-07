@@ -347,12 +347,10 @@ func (h *Handlers) buildSupportBundle(ctx context.Context) ([]byte, error) {
 	_ = writeJSONFile("system/config-summary.json", supportConfigSummary())
 	_ = writeJSONFile("system/env-summary.json", supportEnvSummary())
 	_ = writeJSONFile("system/status.json", h.safeFetchOrError(ctx, "backend_status", "http://local/api/v1/system/status"))
+	_ = writeJSONFile("system/readyz.json", h.supportReadyzSnapshot(ctx))
+	_ = writeJSONFile("system/dependencies.json", h.computeDependencySummary(ctx))
 	_ = writeJSONFile("system/health-detail.json", h.safeFetchOrError(ctx, "backend_health_detail", "http://local/api/v1/system/health-detail"))
-	_ = writeJSONFile("system/migration-status.json", map[string]any{
-		"backend_downloadqueue_migrations": "unknown",
-		"backend_importer_migrations":      "unknown",
-		"notes":                            "Migration introspection is not exposed through current runtime interfaces.",
-	})
+	_ = writeJSONFile("system/migration-status.json", h.computeMigrationStatus(ctx))
 
 	_ = writeJSONFile("queue/backend-jobs.json", h.supportJobsSnapshot())
 	_ = writeJSONFile("queue/download-jobs.json", h.supportDownloadSnapshot())
@@ -382,6 +380,33 @@ func (h *Handlers) buildSupportBundle(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func (h *Handlers) supportReadyzSnapshot(ctx context.Context) map[string]any {
+	checks := map[string]any{}
+	allOK := true
+	if strings.TrimSpace(h.metadataHealthURL) != "" {
+		result := checkURLHealth(ctx, h.metadataHealthURL+"z", os.Getenv("METADATA_SERVICE_API_KEY"))
+		checks["metadata_service"] = result
+		if result["status"] != "ok" {
+			allOK = false
+		}
+	}
+	if strings.TrimSpace(h.indexerHealthURL) != "" {
+		result := checkURLHealth(ctx, h.indexerHealthURL, os.Getenv("INDEXER_SERVICE_API_KEY"))
+		checks["indexer_service"] = result
+		if result["status"] != "ok" {
+			allOK = false
+		}
+	}
+	status := "ok"
+	if !allOK {
+		status = "degraded"
+	}
+	return map[string]any{
+		"status": status,
+		"checks": checks,
+	}
 }
 
 func (h *Handlers) safeFetchOrError(_ context.Context, kind string, endpoint string) map[string]any {

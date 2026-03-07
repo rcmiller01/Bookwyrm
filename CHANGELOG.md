@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - `GET /api/v1/system/support-bundle` endpoint producing a redacted diagnostics zip for support.
+- Support bundle now includes `system/readyz.json`, `system/dependencies.json`, and `system/migration-status.json` snapshots for faster incident diagnosis.
+- `GET /api/v1/system/migration-status` endpoint for runtime migration readiness (ok/pending/failed).
+- `GET /api/v1/system/dependencies` endpoint with a single functional dependency summary (`can_function_now`).
+- Startup diagnostics now emit explicit `startup warning:` log lines for missing/unreachable metadata/indexer/DB/download-client/indexer-backend dependencies.
 - System remediation actions:
   - `POST /api/v1/system/actions/retry-failed-downloads`
   - `POST /api/v1/system/actions/retry-failed-imports`
@@ -17,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `POST /api/v1/system/actions/rerun-wanted-searches`
   - `POST /api/v1/system/actions/rerun-enrichment`
 - Status page "Support & Recovery" controls for support bundle download and one-click remediation.
+- Status page migration warnings for pending/failed migrations, plus upgrade notes link and backup reminder.
+- Status page degraded-mode messaging now reflects backend dependency summary.
 - Operational docs:
   - `docs/backup-restore.md`
   - `docs/troubleshooting.md`

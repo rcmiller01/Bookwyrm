@@ -20,6 +20,26 @@ type migrationFile struct {
 	sql     string
 }
 
+func EmbeddedMigrationVersions() []int {
+	migrations, err := loadEmbeddedMigrations()
+	if err != nil {
+		return []int{}
+	}
+	versions := make([]int, 0, len(migrations))
+	for _, migration := range migrations {
+		versions = append(versions, migration.version)
+	}
+	return versions
+}
+
+func LatestEmbeddedMigrationVersion() int {
+	versions := EmbeddedMigrationVersions()
+	if len(versions) == 0 {
+		return 0
+	}
+	return versions[len(versions)-1]
+}
+
 func RunMigrations(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -30,31 +50,10 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
-	entries, err := migrationFS.ReadDir("migrations")
+	migrations, err := loadEmbeddedMigrations()
 	if err != nil {
-		return fmt.Errorf("read migrations: %w", err)
+		return err
 	}
-
-	migrations := make([]migrationFile, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
-			continue
-		}
-		version, err := parseVersion(entry.Name())
-		if err != nil {
-			return err
-		}
-		content, err := migrationFS.ReadFile(filepath.ToSlash(filepath.Join("migrations", entry.Name())))
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
-		}
-		migrations = append(migrations, migrationFile{
-			version: version,
-			name:    entry.Name(),
-			sql:     string(content),
-		})
-	}
-	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
 
 	for _, migration := range migrations {
 		var applied bool
@@ -81,6 +80,35 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func loadEmbeddedMigrations() ([]migrationFile, error) {
+	entries, err := migrationFS.ReadDir("migrations")
+	if err != nil {
+		return nil, fmt.Errorf("read migrations: %w", err)
+	}
+
+	migrations := make([]migrationFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
+			continue
+		}
+		version, err := parseVersion(entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		content, err := migrationFS.ReadFile(filepath.ToSlash(filepath.Join("migrations", entry.Name())))
+		if err != nil {
+			return nil, fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		}
+		migrations = append(migrations, migrationFile{
+			version: version,
+			name:    entry.Name(),
+			sql:     string(content),
+		})
+	}
+	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
+	return migrations, nil
 }
 
 func parseVersion(name string) (int, error) {

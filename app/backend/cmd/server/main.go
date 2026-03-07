@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -153,6 +155,7 @@ func main() {
 	h.SetUpstreamURLs(metadataURL, indexerURL)
 	h.SetStartupTime(time.Now())
 	h.SetLibraryRoot(libraryRoot)
+	emitStartupWarnings(metadataURL, metadataAPIKey, indexerURL, indexerAPIKey, databaseDSN, downloadService)
 	router := api.NewRouterWithConfig(h, api.RouterConfig{
 		UIAssetsDir:          uiAssetsDir,
 		MetadataProxyBaseURL: metadataURL,
@@ -299,4 +302,118 @@ func atoiOrDefault(raw string, fallback int) int {
 		return fallback
 	}
 	return out
+}
+
+func emitStartupWarnings(metadataURL, metadataAPIKey, indexerURL, indexerAPIKey, databaseDSN string, downloadService *download.Service) {
+	if strings.TrimSpace(databaseDSN) == "" {
+		log.Printf("startup warning: DATABASE_DSN is not configured; backend state will be in-memory only")
+	} else if err := pingDatabase(databaseDSN); err != nil {
+		log.Printf("startup warning: database unavailable (%v)", err)
+	}
+
+	if err := checkHTTPHealth(joinURL(metadataURL, "/healthz"), metadataAPIKey); err != nil {
+		log.Printf("startup warning: metadata-service unavailable (%v)", err)
+	}
+	if err := checkHTTPHealth(joinURL(indexerURL, "/v1/indexer/health"), indexerAPIKey); err != nil {
+		log.Printf("startup warning: indexer-service unavailable (%v)", err)
+	}
+
+	if enabledBackends, err := fetchEnabledIndexerBackends(indexerURL, indexerAPIKey); err != nil {
+		log.Printf("startup warning: could not verify enabled indexer backends (%v)", err)
+	} else if enabledBackends == 0 {
+		log.Printf("startup warning: no enabled indexer backends detected")
+	}
+
+	if downloadService == nil || len(downloadService.ListClientNames()) == 0 {
+		log.Printf("startup warning: no download clients configured")
+	}
+}
+
+func pingDatabase(databaseDSN string) error {
+	db, err := sql.Open("postgres", strings.TrimSpace(databaseDSN))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return db.PingContext(ctx)
+}
+
+func checkHTTPHealth(healthURL string, apiKey string) error {
+	if strings.TrimSpace(healthURL) == "" {
+		return fmt.Errorf("health URL not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("X-API-Key", strings.TrimSpace(apiKey))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func fetchEnabledIndexerBackends(indexerURL string, apiKey string) (int, error) {
+	if strings.TrimSpace(indexerURL) == "" {
+		return 0, fmt.Errorf("indexer URL not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, joinURL(indexerURL, "/v1/indexer/backends"), nil)
+	if err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("X-API-Key", strings.TrimSpace(apiKey))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return 0, err
+	}
+	rawList, _ := body["backends"].([]any)
+	enabled := 0
+	for _, raw := range rawList {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		v, _ := item["enabled"].(bool)
+		if v {
+			enabled++
+		}
+	}
+	return enabled, nil
+}
+
+func joinURL(base string, path string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	joinPath := "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	u.Path = strings.TrimRight(u.Path, "/") + joinPath
+	return u.String()
 }
