@@ -57,6 +57,16 @@ type ImportConfig struct {
 	LibraryRoot  string
 }
 
+type SystemDiagnosticsStats struct {
+	SearchesExecuted    int64  `json:"searches_executed"`
+	CandidatesEvaluated int64  `json:"candidates_evaluated"`
+	GrabsPerformed      int64  `json:"grabs_performed"`
+	DownloadsCompleted  int64  `json:"downloads_completed"`
+	ImportsCompleted    int64  `json:"imports_completed"`
+	ImportsNeedsReview  int64  `json:"imports_needs_review"`
+	IndexerError        string `json:"indexer_error,omitempty"`
+}
+
 func NewHandlers(metaClient *metadata.Client, indexerClient *indexer.Client, watchlistStore store.WatchlistStore) *Handlers {
 	domainPack, err := factory.Resolve("books")
 	if err != nil {
@@ -376,6 +386,38 @@ func (h *Handlers) SystemStatus(w http.ResponseWriter, r *http.Request) {
 		"library_exists":     libraryExists,
 		"download_clients":   downloadClients,
 	})
+}
+
+func (h *Handlers) SystemStats(w http.ResponseWriter, r *http.Request) {
+	stats := SystemDiagnosticsStats{}
+
+	if h.indexerClient != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		indexerStats, err := h.indexerClient.GetStats(ctx)
+		if err != nil {
+			stats.IndexerError = err.Error()
+		} else {
+			stats.SearchesExecuted = indexerStats.SearchesExecuted
+			stats.CandidatesEvaluated = indexerStats.CandidatesEvaluated
+			stats.GrabsPerformed = indexerStats.GrabsPerformed
+		}
+	} else {
+		stats.IndexerError = "indexer client not configured"
+	}
+
+	if h.downloadMgr != nil {
+		downloadCounts := h.downloadMgr.CountJobsByStatus()
+		stats.DownloadsCompleted = int64(downloadCounts[downloadqueue.JobStatusCompleted])
+	}
+
+	if h.importStore != nil {
+		importCounts := h.importStore.CountJobsByStatus()
+		stats.ImportsCompleted = int64(importCounts[importer.JobStatusImported])
+		stats.ImportsNeedsReview = int64(importCounts[importer.JobStatusNeedsReview])
+	}
+
+	writeJSON(w, map[string]any{"stats": stats})
 }
 
 func (h *Handlers) TestDownloadClient(w http.ResponseWriter, r *http.Request) {

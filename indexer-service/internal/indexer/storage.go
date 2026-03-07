@@ -50,4 +50,12 @@ type Storage interface {
 
 	// Ping checks connectivity to the underlying storage backend.
 	Ping() error
+
+	GetDiagnosticsStats() DiagnosticsStats
+}
+
+type DiagnosticsStats struct {
+	SearchesExecuted    int64 `json:"searches_executed"`
+	CandidatesEvaluated int64 `json:"candidates_evaluated"`
+	GrabsPerformed      int64 `json:"grabs_performed"`
 }

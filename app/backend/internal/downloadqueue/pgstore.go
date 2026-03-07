@@ -119,6 +119,27 @@ func (s *PGStore) ListJobs(filter JobFilter) []Job {
 	return out
 }
 
+func (s *PGStore) CountJobsByStatus() map[JobStatus]int {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT status, COUNT(*)
+		FROM download_jobs
+		GROUP BY status`)
+	if err != nil {
+		return map[JobStatus]int{}
+	}
+	defer rows.Close()
+	out := map[JobStatus]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if scanErr := rows.Scan(&status, &count); scanErr != nil {
+			continue
+		}
+		out[JobStatus(status)] = count
+	}
+	return out
+}
+
 func (s *PGStore) ClaimNextQueued(workerID string, now time.Time) (Job, bool, error) {
 	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {

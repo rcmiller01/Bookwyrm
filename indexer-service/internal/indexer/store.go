@@ -19,19 +19,19 @@ type Store struct {
 	nextCandidateID int64
 	nextGrabID      int64
 
-	backends            map[string]BackendRecord
-	mcpServers          map[string]MCPServerRecord
-	searchRequests      map[int64]SearchRequestRecord
-	requestKeyToID      map[string]int64
-	candidatesByReq     map[int64][]CandidateRecord
-	candidateByID       map[int64]CandidateRecord
-	grabsByID           map[int64]GrabRecord
-	grabsByFingerprint  map[string]int64 // fingerprint+entity_type+entity_id → grab ID
-	wantedWorks         map[string]WantedWorkRecord
-	wantedAuthors       map[string]WantedAuthorRecord
-	backendMetrics      map[string]indexerMetrics
-	profiles            map[string]ProfileRecord
-	profileQuality      map[string][]ProfileQualityRecord
+	backends           map[string]BackendRecord
+	mcpServers         map[string]MCPServerRecord
+	searchRequests     map[int64]SearchRequestRecord
+	requestKeyToID     map[string]int64
+	candidatesByReq    map[int64][]CandidateRecord
+	candidateByID      map[int64]CandidateRecord
+	grabsByID          map[int64]GrabRecord
+	grabsByFingerprint map[string]int64 // fingerprint+entity_type+entity_id → grab ID
+	wantedWorks        map[string]WantedWorkRecord
+	wantedAuthors      map[string]WantedAuthorRecord
+	backendMetrics     map[string]indexerMetrics
+	profiles           map[string]ProfileRecord
+	profileQuality     map[string][]ProfileQualityRecord
 }
 
 type indexerMetrics struct {
@@ -44,20 +44,20 @@ type indexerMetrics struct {
 
 func NewStore() *Store {
 	return &Store{
-		nextRequestID:   1,
-		nextCandidateID: 1,
-		nextGrabID:      1,
-		backends:        map[string]BackendRecord{},
-		mcpServers:      map[string]MCPServerRecord{},
-		searchRequests:  map[int64]SearchRequestRecord{},
-		requestKeyToID:  map[string]int64{},
+		nextRequestID:      1,
+		nextCandidateID:    1,
+		nextGrabID:         1,
+		backends:           map[string]BackendRecord{},
+		mcpServers:         map[string]MCPServerRecord{},
+		searchRequests:     map[int64]SearchRequestRecord{},
+		requestKeyToID:     map[string]int64{},
 		candidatesByReq:    map[int64][]CandidateRecord{},
 		candidateByID:      map[int64]CandidateRecord{},
 		grabsByID:          map[int64]GrabRecord{},
 		grabsByFingerprint: map[string]int64{},
 		wantedWorks:        map[string]WantedWorkRecord{},
-		wantedAuthors:   map[string]WantedAuthorRecord{},
-		backendMetrics:  map[string]indexerMetrics{},
+		wantedAuthors:      map[string]WantedAuthorRecord{},
+		backendMetrics:     map[string]indexerMetrics{},
 		profiles: map[string]ProfileRecord{
 			"default-ebook": {
 				ID:             "default-ebook",
@@ -853,6 +853,22 @@ func (s *Store) GetDefaultProfileID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.defaultProfileIDLocked()
+}
+
+func (s *Store) GetDiagnosticsStats() DiagnosticsStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var candidates int64
+	for _, items := range s.candidatesByReq {
+		candidates += int64(len(items))
+	}
+
+	return DiagnosticsStats{
+		SearchesExecuted:    int64(len(s.searchRequests)),
+		CandidatesEvaluated: candidates,
+		GrabsPerformed:      int64(len(s.grabsByID)),
+	}
 }
 
 func (s *Store) defaultProfileIDLocked() string {

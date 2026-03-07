@@ -86,6 +86,67 @@ func TestProvidersEndpoint(t *testing.T) {
 	}
 }
 
+func TestStatsEndpoint(t *testing.T) {
+	h := testHandlers()
+	r := NewRouter(h)
+
+	// Seed one search/candidate/grab to validate non-zero counters.
+	body := bytes.NewBufferString(`{"title":"Dune","author":"Frank Herbert","limit":2}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/indexer/search/work/work-stats", body)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200 enqueue, got %d", res.Code)
+	}
+	var enqueue map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&enqueue)
+	reqID := int64(enqueue["search_request_id"].(float64))
+	waitForStatus(t, r, reqID, "succeeded", 3*time.Second)
+
+	candidatesReq := httptest.NewRequest(http.MethodGet, "/v1/indexer/candidates/"+itoa(reqID)+"?limit=1", nil)
+	candidatesRes := httptest.NewRecorder()
+	r.ServeHTTP(candidatesRes, candidatesReq)
+	if candidatesRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 candidates, got %d", candidatesRes.Code)
+	}
+	var cPayload map[string]any
+	_ = json.NewDecoder(candidatesRes.Body).Decode(&cPayload)
+	items, _ := cPayload["items"].([]any)
+	if len(items) == 0 {
+		t.Fatalf("expected at least one candidate")
+	}
+	first, _ := items[0].(map[string]any)
+	candidateID := int64(first["id"].(float64))
+
+	grabReq := httptest.NewRequest(http.MethodPost, "/v1/indexer/grab/"+itoa(candidateID), nil)
+	grabRes := httptest.NewRecorder()
+	r.ServeHTTP(grabRes, grabReq)
+	if grabRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 grab, got %d", grabRes.Code)
+	}
+
+	statsReq := httptest.NewRequest(http.MethodGet, "/v1/indexer/stats", nil)
+	statsRes := httptest.NewRecorder()
+	r.ServeHTTP(statsRes, statsReq)
+	if statsRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 stats, got %d", statsRes.Code)
+	}
+	var statsPayload map[string]any
+	if err := json.NewDecoder(statsRes.Body).Decode(&statsPayload); err != nil {
+		t.Fatalf("decode stats failed: %v", err)
+	}
+	stats, _ := statsPayload["stats"].(map[string]any)
+	if stats["searches_executed"].(float64) < 1 {
+		t.Fatalf("expected searches_executed >= 1, got %v", stats["searches_executed"])
+	}
+	if stats["candidates_evaluated"].(float64) < 1 {
+		t.Fatalf("expected candidates_evaluated >= 1, got %v", stats["candidates_evaluated"])
+	}
+	if stats["grabs_performed"].(float64) < 1 {
+		t.Fatalf("expected grabs_performed >= 1, got %v", stats["grabs_performed"])
+	}
+}
+
 func TestSearchNoAdapters(t *testing.T) {
 	svc := indexer.NewService()
 	store := indexer.NewStore()

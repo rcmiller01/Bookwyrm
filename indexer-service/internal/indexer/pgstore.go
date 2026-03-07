@@ -1014,6 +1014,25 @@ func (s *PGStore) GetDefaultProfileID() string {
 	return ""
 }
 
+func (s *PGStore) GetDiagnosticsStats() DiagnosticsStats {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var searches int64
+	var candidates int64
+	var grabs int64
+
+	_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM indexer_search_requests`).Scan(&searches)
+	_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM indexer_candidates`).Scan(&candidates)
+	_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM indexer_grabs`).Scan(&grabs)
+
+	return DiagnosticsStats{
+		SearchesExecuted:    searches,
+		CandidatesEvaluated: candidates,
+		GrabsPerformed:      grabs,
+	}
+}
+
 type scanRow interface {
 	Scan(dest ...any) error
 }

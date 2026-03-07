@@ -75,6 +75,12 @@ func (h *Handlers) Readyz(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+func (h *Handlers) Stats(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{
+		"stats": h.store.GetDiagnosticsStats(),
+	})
+}
+
 func (h *Handlers) ListProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"providers": h.service.ListProviders(r.Context())})
 }

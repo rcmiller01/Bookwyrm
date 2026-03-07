@@ -7,10 +7,28 @@ Bookwyrm exposes health, readiness, dependency, and metrics endpoints for operat
 - `GET /api/v1/healthz`
 - `GET /api/v1/readyz`
 - `GET /api/v1/system/status`
+- `GET /api/v1/system/stats`
 - `GET /api/v1/system/health-detail`
 - `GET /api/v1/system/dependencies`
 - `GET /api/v1/system/migration-status`
 - `GET /metrics` (service-level Prometheus format)
+
+## Diagnostics Counters (Telemetry-Free)
+
+`GET /api/v1/system/stats` surfaces behavior counters for pipeline debugging without any user tracking:
+
+- `searches_executed`
+- `candidates_evaluated`
+- `grabs_performed`
+- `downloads_completed`
+- `imports_completed`
+- `imports_needs_review`
+
+This makes failures immediately classifiable, for example:
+
+- searches high + candidates high + grabs zero => scoring/decision threshold issue
+- grabs high + downloads completed low => downloader/client handoff issue
+- downloads completed high + imports completed low => import/matching path issue
 
 ## Functional Readiness Invariant
 

@@ -137,6 +137,16 @@ func (s *Store) ListJobs(filter JobFilter) []Job {
 	return out
 }
 
+func (s *Store) CountJobsByStatus() map[JobStatus]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := map[JobStatus]int{}
+	for _, job := range s.jobs {
+		out[job.Status]++
+	}
+	return out
+}
+
 func (s *Store) ClaimNextQueued(workerID string, now time.Time) (Job, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

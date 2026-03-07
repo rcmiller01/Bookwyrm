@@ -46,6 +46,12 @@ type CandidateRecord struct {
 	} `json:"candidate"`
 }
 
+type DiagnosticsStats struct {
+	SearchesExecuted    int64 `json:"searches_executed"`
+	CandidatesEvaluated int64 `json:"candidates_evaluated"`
+	GrabsPerformed      int64 `json:"grabs_performed"`
+}
+
 func NewClient(cfg Config) *Client {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -161,6 +167,38 @@ func (c *Client) GetCandidate(ctx context.Context, candidateID int64) (Candidate
 		record.Candidate.GrabPayload = map[string]any{}
 	}
 	return record, nil
+}
+
+func (c *Client) GetStats(ctx context.Context) (DiagnosticsStats, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/indexer/stats", nil)
+	if err != nil {
+		return DiagnosticsStats{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return DiagnosticsStats{}, err
+	}
+	defer resp.Body.Close()
+
+	var parsed struct {
+		Stats DiagnosticsStats `json:"stats"`
+		Error string           `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return DiagnosticsStats{}, err
+	}
+	if resp.StatusCode >= 400 {
+		if parsed.Error != "" {
+			return DiagnosticsStats{}, fmt.Errorf("indexer-service error (%d): %s", resp.StatusCode, parsed.Error)
+		}
+		return DiagnosticsStats{}, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	return parsed.Stats, nil
 }
 
 func toInt64(v any) int64 {

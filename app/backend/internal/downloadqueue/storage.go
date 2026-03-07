@@ -16,6 +16,7 @@ type Storage interface {
 	CreateJob(job Job) (Job, error)
 	GetJob(id int64) (Job, error)
 	ListJobs(filter JobFilter) []Job
+	CountJobsByStatus() map[JobStatus]int
 	ClaimNextQueued(workerID string, now time.Time) (Job, bool, error)
 	RecoverExpiredLeases(now time.Time, limit int) (int, error)
 	ListActiveJobs(limit int) []Job

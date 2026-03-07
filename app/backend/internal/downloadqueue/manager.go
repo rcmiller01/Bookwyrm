@@ -140,6 +140,10 @@ func (m *Manager) ListJobs(filter JobFilter) []Job {
 	return m.store.ListJobs(filter)
 }
 
+func (m *Manager) CountJobsByStatus() map[JobStatus]int {
+	return m.store.CountJobsByStatus()
+}
+
 func (m *Manager) ListClients() []DownloadClientRecord {
 	return m.store.ListClients()
 }

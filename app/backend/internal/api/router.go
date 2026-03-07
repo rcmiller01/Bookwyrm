@@ -36,6 +36,7 @@ func NewRouterWithConfig(h *Handlers, cfg RouterConfig) http.Handler {
 	api.HandleFunc("/healthz", h.Healthz).Methods(http.MethodGet)
 	api.HandleFunc("/readyz", h.Readyz).Methods(http.MethodGet)
 	api.HandleFunc("/system/status", h.SystemStatus).Methods(http.MethodGet)
+	api.HandleFunc("/system/stats", h.SystemStats).Methods(http.MethodGet)
 	api.HandleFunc("/system/logs-location", h.SystemLogsLocation).Methods(http.MethodGet)
 	api.HandleFunc("/system/dependencies", h.SystemDependencies).Methods(http.MethodGet)
 	api.HandleFunc("/system/migration-status", h.SystemMigrationStatus).Methods(http.MethodGet)

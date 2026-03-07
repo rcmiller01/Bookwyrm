@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Telemetry-free diagnostics counters endpoint:
+  - `GET /v1/indexer/stats` (searches executed, candidates evaluated, grabs performed)
+  - `GET /api/v1/system/stats` (aggregated search/candidate/grab/download/import counters)
 - Phase 22 alpha-release documentation set:
   - README overhaul with project overview, architecture, install, troubleshooting, and development sections.
   - `docs/release-workflow.md`
