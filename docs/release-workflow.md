@@ -50,3 +50,14 @@ git push origin v0.1.0-alpha
 - Upgrade notes
 - Supported deployment modes
 - Issue reporting instructions with support bundle attachment
+
+## Windows Alpha Notes Template
+
+Use this wording (or equivalent) in alpha release notes:
+
+```text
+Important: Windows alpha releases are currently distributed as ZIP packages only.
+Unsigned installers were removed from public distribution to avoid SmartScreen friction and reduce early-release support burden.
+
+Use bookwyrm-launcher.exe from the extracted package to start Bookwyrm.
+```

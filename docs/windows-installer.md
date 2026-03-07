@@ -6,20 +6,38 @@ Bookwyrm alpha distributions are zip-only to avoid unsigned installer confusion.
 
 - `bookwyrm-<version>-windows.zip`
 
+## Zip structure
+
+```text
+Bookwyrm/
+  bin/
+  config/
+    bookwyrm.env.example
+    metadata-service.yaml.example
+  docs/
+    RUN-BOOKWYRM-WINDOWS.md
+  scripts/
+    start-bookwyrm.ps1
+    install-service.ps1
+    uninstall-service.ps1
+  logs/
+  data/
+```
+
 ## Install from zip
 
-1. Extract zip to a stable folder, for example `C:\ProgramData\Bookwyrm`.
+1. Extract zip to a stable folder root, for example `C:\ProgramData` (creates `C:\ProgramData\Bookwyrm`).
 2. Ensure these subfolders exist after extraction:
    - `bin\`
    - `config\`
    - `logs\`
    - `data\`
 3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml` for your environment.
-4. Start Bookwyrm:
+4. Start Bookwyrm using the helper script:
 
 ```powershell
 cd C:\ProgramData\Bookwyrm
-.\bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm
+.\scripts\start-bookwyrm.ps1
 ```
 
 5. Open `http://localhost:8090` and complete setup.
