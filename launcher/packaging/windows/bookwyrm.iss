@@ -1,6 +1,8 @@
 ; Inno Setup script for Bookwyrm Phase 21 packaging
 #define MyAppName "Bookwyrm"
-#define MyAppVersion "0.21.0-beta"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.1.0-alpha"
+#endif
 #define MyPublisher "Bookwyrm"
 #define MyExeName "bookwyrm-launcher.exe"
 
@@ -12,7 +14,7 @@ AppPublisher={#MyPublisher}
 DefaultDirName={commonappdata}\Bookwyrm
 DisableProgramGroupPage=yes
 OutputDir=.
-OutputBaseFilename=bookwyrm-installer
+OutputBaseFilename=bookwyrm-{#MyAppVersion}-setup
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -49,4 +51,3 @@ Filename: "http://localhost:8090"; Flags: shellexec postinstall skipifsilent; Ta
 [UninstallRun]
 Filename: "{app}\bin\bookwyrm-launcher.exe"; Parameters: "stop-service --base-dir ""{app}"""; Flags: runhidden
 Filename: "{app}\bin\bookwyrm-launcher.exe"; Parameters: "uninstall-service --base-dir ""{app}"""; Flags: runhidden
-

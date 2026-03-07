@@ -1,162 +1,131 @@
 # Bookwyrm
 
-## Platform Modules (Phase 14)
+Bookwyrm is a modern automated book management system inspired by the Arr ecosystem. It is built for ebooks and audiobooks, with Sonarr/Radarr-style monitoring, search, download orchestration, import/rename workflows, and explainable decisioning.
 
-Phase 14 introduces optional root shared modules for cross-service primitives:
+## Why Bookwyrm
 
-- `platform/normalize`
-- `platform/policy`
-- `platform/queue`
-- `platform/metrics`
+Bookwyrm exists to provide an Arr-style experience for books with stronger explainability and operational support:
 
-Current usage follows a wrapper-first migration pattern:
+- Reliable long-running automation across metadata, search, download, and import stages
+- Modular services with clear boundaries for easier debugging and upgrades
+- Windows-native launcher + installer flow for non-technical users
+- Flexible search pipelines (Prowlarr and direct providers)
+- Transparent scoring and review workflows for low-confidence imports
 
-- Service-internal packages remain the stable call surface.
-- Internal packages may delegate/re-export from `platform/*` modules.
-- Service runtime behavior and external APIs remain unchanged.
+## How It Differs from Readarr
 
-Ownership boundary:
+- Three-service modular architecture (`metadata-service`, `indexer-service`, `app/backend`) supervised by a single launcher
+- Explainable candidate scoring and recommendation reasons surfaced in UI
+- Reliability/tier-aware provider and backend routing
+- Built-in support bundle export and remediation actions for supportability
+- Native Windows launcher/service/installer target from day one
 
-- Put generic, reusable primitives in `platform/*`.
-- Keep service-specific orchestration, schema assumptions, and workflow logic in each service module.
+## Key Features
 
-## Provider Dispatch Policy (Phase 3)
+- Automated metadata discovery and enrichment
+- Multi-source metadata aggregation with reliability scoring
+- Sonarr-style wanted monitoring model for authors and works
+- Profiles with format quality ordering and cutoff upgrades
+- Manual search with scoring explainability
+- Needs-review workflow with keep/replace/skip decisions
+- Download client integration (SABnzbd, NZBGet, qBittorrent)
+- Import pipeline with naming/path previews
+- Timeline/history visibility for works
+- Recommendation graph APIs and UI reasons
+- Support bundle diagnostics export (redacted)
+- Windows-native launcher + service flow
 
-Provider reliability now supports a quarantine tier (`score < 0.40`).
+## Screenshots
 
-- Default behavior: quarantine providers are **last-resort** (still dispatchable, ordered last).
-- Optional behavior: quarantine providers are **disabled** (skipped from dispatch).
+Screenshots are published in alpha release notes and docs once each tagged alpha artifact is produced. The first set includes:
 
-### Recommended config (extensible)
+- Dashboard
+- Book detail (overview/search/history)
+- Manual search scoring panel
+- Import needs-review comparison
+- System status/recovery page
 
-```yaml
-providers:
-	dispatch_policy:
-		quarantine_mode: last_resort # last_resort | disabled
+## Installation
+
+### Windows (Recommended)
+
+1. Download `bookwyrm-<version>-setup.exe` from releases.
+2. Run installer and keep default paths unless you have a specific reason to change.
+3. Open `http://localhost:8090` (opened automatically on first successful startup).
+4. Complete the setup checklist in the UI.
+
+Recommended DB mode for Windows alpha: native Bookwyrm + Postgres in Docker Desktop (hybrid).
+
+### Docker / Hybrid
+
+Use `docker-compose.yml` for full-stack local deployment, or run Bookwyrm services natively and Postgres in Docker:
+
+- [Docker hybrid guide](docs/docker-hybrid.md)
+- [Postgres hybrid details](docs/postgres-hybrid.md)
+
+## Architecture Overview
+
+Bookwyrm keeps service boundaries explicit:
+
+- `metadata-service`: metadata providers, normalization, enrichment, graph/recommendations
+- `indexer-service`: wanted model, indexer routing, search orchestration, reliability
+- `app/backend`: UI/API gateway, queue/import orchestration, system status, support tools
+
+Windows packaging adds:
+
+- `bookwyrm-launcher`: supervises the 3 services, health-waits startup, manages logs/service lifecycle
+
+This yields one user-facing app without collapsing internal modularity.
+
+## Configuration Overview
+
+Primary setup areas:
+
+- Library root and staging/trash behavior
+- Metadata providers
+- Indexer backends and staged search controls
+- Download clients and protocol defaults
+- Profiles and monitoring defaults
+
+Secrets are env/YAML driven and are not written back from UI as plain values.
+
+## Troubleshooting and Support
+
+- [Troubleshooting](docs/troubleshooting.md)
+- [Windows native deployment](docs/windows-native.md)
+- [Postgres hybrid mode](docs/postgres-hybrid.md)
+- [Backup and restore](docs/backup-restore.md)
+
+For bug reports, export `Status -> Download Support Bundle` and attach it to the issue.
+
+## Development
+
+Stack:
+
+- Go services
+- React + TypeScript frontend
+- PostgreSQL
+
+Typical local checks:
+
+```bash
+# Go modules
+cd metadata-service && go test ./... -count=1
+cd ../indexer-service && go test ./... -count=1
+cd ../app/backend && go test ./... -count=1
+
+# Web app
+cd web
+npm ci
+npm run lint
+npm test
+npm run build
 ```
 
-### Alternate boolean config (also supported)
+## Contributing
 
-```yaml
-providers:
-	quarantine:
-		disable_dispatch: false
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and review expectations.
 
-If both shapes are present, `dispatch_policy.quarantine_mode` takes precedence.
+## License
 
-## Recommendation Engine (Phase 7)
-
-Recommendation APIs are available for graph-based discovery:
-
-- `GET /v1/work/{id}/recommendations`
-- `GET /v1/work/{id}/next`
-- `GET /v1/work/{id}/similar`
-
-Supported query parameters:
-
-- `limit` (bounded to 100)
-- `include` (comma-separated: `series`, `author`, `subjects`, `relationships`)
-- `formats` (comma-separated preference values)
-- `languages` (comma-separated preference values)
-
-Runtime behavior:
-
-- Results are deterministic (`score DESC`, then `work_id ASC`).
-- Responses include explainability through `reasons`.
-- Recommendation caching and scoring defaults are controlled via the `recommendation` config block in `configs/config.yaml` (or defaults in code when omitted).
-
-## Advanced Metadata Sources (Phase 8)
-
-Optional provider adapters were added for broader edition discovery coverage:
-
-- `annasarchive`
-- `librarything`
-- `worldcat`
-
-These providers are disabled by default and can be enabled in `configs/config.yaml`.
-
-Phase 8 also adds additive schema tables:
-
-- `content_sources`
-- `file_metadata`
-
-Migration files:
-
-- `migrations/000006_advanced_metadata_sources.up.sql`
-- `migrations/000006_advanced_metadata_sources.down.sql`
-
-## Metadata Quality Engine (Phase 9)
-
-Quality APIs are available for inconsistency detection and targeted repair:
-
-- `GET /v1/quality/report`
-- `POST /v1/quality/repair`
-
-Supported capabilities:
-
-- Graph anomaly detection for series entries with missing/duplicate ordering indexes
-- Conflicting publication year detection across editions of the same work
-- Duplicate edition cluster detection (report-only)
-- Identifier verification for ISBN-10 and ISBN-13 values
-
-Repair behavior:
-
-- Supports dry-run mode via `{"dry_run": true}`
-- Reorders malformed series entry indexes into deterministic sequence order
-- Normalizes `works.first_pub_year` to the minimum known edition publication year for conflicted works
-- Optionally removes invalid ISBN identifiers (`remove_invalid_identifiers`, default true)
-
-## Metadata Service Platform (Phase 10)
-
-The public `v1` API is now treated as a stable integration surface.
-
-Platform features:
-
-- Stable API version header on all `v1` responses: `X-Bookwyrm-API-Version: v1`
-- Optional API authentication via `X-API-Key` or `Authorization: Bearer <key>`
-- Configurable API rate limiting with standard headers
-- Starter client SDKs for Go and Python
-- Public API contract documentation
-
-Configuration (`configs/config.yaml`):
-
-```yaml
-api:
-	auth:
-		enabled: false
-		keys: []
-	rate_limit:
-		enabled: true
-		requests_per_minute: 120
-		burst: 20
-```
-
-Environment overrides:
-
-- `API_AUTH_ENABLED`
-- `API_AUTH_KEYS` (comma-separated)
-- `API_RATE_LIMIT_ENABLED`
-- `API_RATE_LIMIT_RPM`
-- `API_RATE_LIMIT_BURST`
-
-Additional docs and SDKs:
-
-- `metadata-service/docs/api_v1.md`
-- `metadata-service/sdk/README.md`
-
-## Provider Expansion (Phase 10.1)
-
-Additional metadata providers are supported:
-
-- `crossref` (DOI-first scholarly metadata)
-- `googlebooks` (broader catalog metadata)
-- `hardcover` (series and subject-rich metadata)
-
-Configuration (`metadata-service/configs/config.yaml`) keeps these disabled by default.
-
-Environment overrides for secrets/identity:
-
-- `PROVIDER_GOOGLEBOOKS_API_KEY`
-- `PROVIDER_HARDCOVER_API_KEY`
-- `PROVIDER_CROSSREF_MAILTO`
+This repository is currently distributed for alpha testing and development review. A formal open-source license declaration will be finalized before broader public release.

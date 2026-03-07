@@ -19,6 +19,7 @@ jobs:
           - metadata-service
           - indexer-service
           - app/backend
+          - launcher
 
     defaults:
       run:
@@ -54,6 +55,7 @@ jobs:
           - metadata-service
           - indexer-service
           - app/backend
+          - launcher
 
     steps:
       - name: Checkout
@@ -96,3 +98,6 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build

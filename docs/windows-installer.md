@@ -1,4 +1,4 @@
-# Windows Installer (Phase 21 Target)
+# Windows Installer
 
 This document defines the intended installer behavior for native Windows packaging.
 
@@ -10,6 +10,9 @@ This document defines the intended installer behavior for native Windows packagi
 - Optionally register Bookwyrm as a Windows service
 - Optionally open `http://localhost:8090` after install
 - Optional install script: `launcher/packaging/windows/bookwyrm.iss` (Inno Setup)
+- Alpha artifact naming:
+  - `bookwyrm-<version>-setup.exe`
+  - `bookwyrm-<version>-windows.zip`
 
 ## Installer prompts (recommended)
 
@@ -38,3 +41,4 @@ Invoke-RestMethod http://localhost:8090/api/v1/system/migration-status
 ```
 
 - `can_function_now=true` confirms startup success.
+- Use [alpha-validation.md](alpha-validation.md) to record clean-machine results per release tag.

@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phase 22 alpha-release documentation set:
+  - README overhaul with project overview, architecture, install, troubleshooting, and development sections.
+  - `docs/release-workflow.md`
+  - `docs/alpha-testing.md`
+  - `docs/alpha-validation.md`
+  - `docs/observability.md`
+  - `docs/support-workflow.md`
+- Alpha support intake template: `.github/ISSUE_TEMPLATE/alpha-bug-report.yml`.
+- Windows alpha packaging scripts:
+  - `scripts/release/build-alpha-windows.ps1`
+  - `scripts/release/validate-alpha-install.ps1`
+- GitHub Actions alpha packaging workflow: `.github/workflows/release-alpha.yml`.
+- Installer packaging now supports versioned output naming (`bookwyrm-<version>-setup.exe`) and ships metadata config template scaffolding.
 - `GET /api/v1/system/support-bundle` endpoint producing a redacted diagnostics zip for support.
 - Support bundle now includes `system/readyz.json`, `system/dependencies.json`, and `system/migration-status.json` snapshots for faster incident diagnosis.
 - `GET /api/v1/system/migration-status` endpoint for runtime migration readiness (ok/pending/failed).
@@ -65,6 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - This changelog
 
 ### Changed
+- CI now includes `launcher` in Go test/lint matrix and runs frontend production build (`npm run build`).
 - metadata-service Dockerfile moved from `docker/Dockerfile` to `Dockerfile` with version stamping
 - metadata-service `/health` endpoint now returns JSON with version info (was plain text "ok")
 - Backend `/api/v1/health` now delegates to `Healthz` handler for consistency

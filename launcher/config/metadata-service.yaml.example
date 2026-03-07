@@ -1,0 +1,19 @@
+# Minimal metadata-service config template for Windows alpha packages.
+# Copy to metadata-service.yaml and adjust provider settings as needed.
+
+server:
+  addr: ":8080"
+
+providers:
+  openlibrary:
+    enabled: true
+  googlebooks:
+    enabled: false
+  hardcover:
+    enabled: false
+  crossref:
+    enabled: false
+
+enrichment:
+  workers: 2
+  max_retries: 3
