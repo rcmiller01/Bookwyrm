@@ -49,6 +49,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: app/backend/web/package-lock.json
 
+      - name: Install frontend dependencies
+        shell: pwsh
+        working-directory: app/backend/web
+        run: npm ci
+
+      - name: Verify frontend build
+        shell: pwsh
+        working-directory: app/backend/web
+        run: npm run build
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
