@@ -13,6 +13,10 @@ CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
    - `DOWNLOADS_COMPLETED_PATH` (example `D:\Downloads\Completed`)
    - `DATABASE_DSN` (example `postgres://bookwyrm:bookwyrm@localhost:5432/bookwyrm_backend?sslmode=disable`)
    - `UI_DIST_DIR` (example `C:\ProgramData\Bookwyrm\web\dist`)
+   - At least one download client (examples):
+     - qBittorrent: `QBITTORRENT_BASE_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD`
+     - SABnzbd: `SABNZBD_BASE_URL`, `SABNZBD_API_KEY`, `SABNZBD_CATEGORY`
+     - NZBGet: `NZBGET_BASE_URL`, `NZBGET_USERNAME`, `NZBGET_PASSWORD`, `NZBGET_CATEGORY`
 4. Edit `config\metadata-service.yaml` database values to match Postgres auth.
 5. Run:
 

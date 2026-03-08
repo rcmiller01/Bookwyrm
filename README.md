@@ -74,6 +74,7 @@ CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
    - `DOWNLOADS_COMPLETED_PATH`
    - `DATABASE_DSN`
    - `UI_DIST_DIR=C:\ProgramData\Bookwyrm\web\dist`
+   - one download client block (qBittorrent, SABnzbd, or NZBGet)
 5. Edit `config\metadata-service.yaml` database credentials to match your Postgres user/password.
 6. Run `scripts\start-bookwyrm.ps1` from `C:\ProgramData\Bookwyrm` (or `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`).
 7. Open `http://localhost:8090` and complete the setup checklist.

@@ -34,6 +34,10 @@ Bookwyrm/
    - `data\`
 3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml` for your environment.
    - Required in `bookwyrm.env`: `LIBRARY_ROOT`, `DOWNLOADS_COMPLETED_PATH`, `DATABASE_DSN`, `UI_DIST_DIR`.
+   - Configure at least one download client in `bookwyrm.env`:
+     - qBittorrent: `QBITTORRENT_BASE_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD`
+     - SABnzbd: `SABNZBD_BASE_URL`, `SABNZBD_API_KEY`, `SABNZBD_CATEGORY`
+     - NZBGet: `NZBGET_BASE_URL`, `NZBGET_USERNAME`, `NZBGET_PASSWORD`, `NZBGET_CATEGORY`
    - Required in `metadata-service.yaml`: `database.host`, `database.port`, `database.user`, `database.password`, `database.dbname`.
 4. Start Bookwyrm using the helper script:
 

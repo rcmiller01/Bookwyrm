@@ -156,6 +156,45 @@ export function DownloadClientsPage() {
         </table>
       </div>
 
+      {rows.length === 0 ? (
+        <div className="rounded border border-amber-900/80 bg-amber-950/30 p-4 text-sm text-amber-100">
+          <p className="font-medium">No download clients are configured yet.</p>
+          <p className="mt-2 text-amber-200">
+            Download clients are configured via <code>config\\bookwyrm.env</code>. Add one or more blocks below, then restart Bookwyrm.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded border border-amber-900/60 bg-slate-900/40 p-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-300">qBittorrent</p>
+              <pre className="overflow-x-auto text-xs text-slate-200">
+QBITTORRENT_BASE_URL=http://localhost:8081
+QBITTORRENT_USERNAME=admin
+QBITTORRENT_PASSWORD=change-me
+              </pre>
+            </div>
+            <div className="rounded border border-amber-900/60 bg-slate-900/40 p-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-300">SABnzbd</p>
+              <pre className="overflow-x-auto text-xs text-slate-200">
+SABNZBD_BASE_URL=http://localhost:8085
+SABNZBD_API_KEY=change-me
+SABNZBD_CATEGORY=books
+              </pre>
+            </div>
+            <div className="rounded border border-amber-900/60 bg-slate-900/40 p-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-300">NZBGet</p>
+              <pre className="overflow-x-auto text-xs text-slate-200">
+NZBGET_BASE_URL=http://localhost:6789
+NZBGET_USERNAME=nzbget
+NZBGET_PASSWORD=change-me
+NZBGET_CATEGORY=books
+              </pre>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-amber-300">
+            After restart, return to this page and use <strong>Test</strong> to verify connectivity.
+          </p>
+        </div>
+      ) : null}
+
       {clientsQuery.isLoading ? <p className="text-sm text-slate-400">Loading download clients...</p> : null}
       {clientsQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load download clients.</div> : null}
     </section>
