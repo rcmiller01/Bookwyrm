@@ -29,6 +29,7 @@ $stageDocs = Join-Path $stageRoot "docs"
 $stageScripts = Join-Path $stageRoot "scripts"
 $stageLogs = Join-Path $stageRoot "logs"
 $stageData = Join-Path $stageRoot "data"
+$stageWebDist = Join-Path $stageRoot "web\dist"
 
 Write-Host "Preparing release directories..."
 Remove-Item -Recurse -Force $packageRoot -ErrorAction SilentlyContinue
@@ -38,6 +39,7 @@ New-Item -ItemType Directory -Force -Path $stageDocs | Out-Null
 New-Item -ItemType Directory -Force -Path $stageScripts | Out-Null
 New-Item -ItemType Directory -Force -Path $stageLogs | Out-Null
 New-Item -ItemType Directory -Force -Path $stageData | Out-Null
+New-Item -ItemType Directory -Force -Path $stageWebDist | Out-Null
 
 Write-Host "Building web assets..."
 Push-Location (Join-Path $repoRoot "app\backend\web")
@@ -78,6 +80,7 @@ Copy-Item (Join-Path $repoRoot "docs\troubleshooting.md") (Join-Path $stageDocs 
 Copy-Item (Join-Path $repoRoot "launcher\packaging\windows\scripts\start-bookwyrm.ps1") (Join-Path $stageScripts "start-bookwyrm.ps1")
 Copy-Item (Join-Path $repoRoot "launcher\packaging\windows\scripts\install-service.ps1") (Join-Path $stageScripts "install-service.ps1")
 Copy-Item (Join-Path $repoRoot "launcher\packaging\windows\scripts\uninstall-service.ps1") (Join-Path $stageScripts "uninstall-service.ps1")
+Copy-Item (Join-Path $repoRoot "app\backend\web\dist\*") $stageWebDist -Recurse
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 $zipPath = Join-Path $outputRoot ("bookwyrm-{0}-windows.zip" -f $Version)
