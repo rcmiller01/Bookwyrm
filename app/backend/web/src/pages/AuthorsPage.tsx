@@ -31,7 +31,6 @@ type AuthorRow = {
 }
 
 type AuthorsViewState = {
-  query: string
   monitorFilter: 'all' | 'monitored' | 'unmonitored'
   sortKey: 'name' | 'works'
   sortDir: 'asc' | 'desc'
@@ -43,13 +42,11 @@ export function AuthorsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [bulkProfileID, setBulkProfileID] = useState('')
 
-  const [query, setQuery] = useLocalStorageState<string>('authors.filter.query', '')
   const [monitorFilter, setMonitorFilter] = useLocalStorageState<'all' | 'monitored' | 'unmonitored'>('authors.filter.monitor', 'all')
   const [sortKey, setSortKey] = useLocalStorageState<'name' | 'works'>('authors.sort.key', 'name')
   const [sortDir, setSortDir] = useLocalStorageState<'asc' | 'desc'>('authors.sort.dir', 'asc')
 
   const currentViewState: AuthorsViewState = {
-    query,
     monitorFilter,
     sortKey,
     sortDir
@@ -60,7 +57,6 @@ export function AuthorsPage() {
     currentState: currentViewState,
     presetViews: getPresetsForPage<AuthorsViewState>('authors'),
     applyState: (state) => {
-      setQuery(state.query)
       setMonitorFilter(state.monitorFilter)
       setSortKey(state.sortKey)
       setSortDir(state.sortDir)
@@ -164,12 +160,10 @@ export function AuthorsPage() {
   }, [defaultProfileID, wantedByID, workDetailsQuery.data])
 
   const filteredRows = useMemo(() => {
-    const lowered = query.trim().toLowerCase()
     const filtered = rows.filter((row) => {
       if (monitorFilter === 'monitored' && !row.monitored) return false
       if (monitorFilter === 'unmonitored' && row.monitored) return false
-      if (!lowered) return true
-      return row.name.toLowerCase().includes(lowered) || row.authorID.toLowerCase().includes(lowered)
+      return true
     })
 
     return [...filtered].sort((a, b) => {
@@ -177,7 +171,7 @@ export function AuthorsPage() {
       if (sortKey === 'works') return (a.worksCount - b.worksCount) * dir
       return a.name.localeCompare(b.name) * dir
     })
-  }, [monitorFilter, query, rows, sortDir, sortKey])
+  }, [monitorFilter, rows, sortDir, sortKey])
 
   const selectedIDs = useMemo(() => filteredRows.filter((row) => row.authorID && selected[row.authorID]).map((row) => row.authorID), [filteredRows, selected])
 
@@ -238,12 +232,6 @@ export function AuthorsPage() {
       />
 
       <FilterBar>
-        <input
-          className="w-full sm:w-64 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-          placeholder="Filter by author or id"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
         <select className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" value={monitorFilter} onChange={(event) => setMonitorFilter(event.target.value as 'all' | 'monitored' | 'unmonitored')}>
           <option value="all">All</option>
           <option value="monitored">Monitored</option>

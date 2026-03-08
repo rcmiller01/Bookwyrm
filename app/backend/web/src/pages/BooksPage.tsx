@@ -55,7 +55,6 @@ type BookRow = {
 type SortKey = 'title' | 'author' | 'files' | 'format'
 
 type BooksViewState = {
-  query: string
   monitorFilter: 'all' | 'monitored' | 'unmonitored'
   missingOnly: boolean
   cutoffOnly: boolean
@@ -80,7 +79,6 @@ export function BooksPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [bulkProfileID, setBulkProfileID] = useState('')
 
-  const [query, setQuery] = useLocalStorageState<string>('books.filter.query', '')
   const [monitorFilter, setMonitorFilter] = useLocalStorageState<'all' | 'monitored' | 'unmonitored'>('books.filter.monitor', 'all')
   const [missingOnly, setMissingOnly] = useLocalStorageState<boolean>('books.filter.missingOnly', false)
   const [cutoffOnly, setCutoffOnly] = useLocalStorageState<boolean>('books.filter.cutoffOnly', false)
@@ -89,7 +87,6 @@ export function BooksPage() {
   const [sortDir, setSortDir] = useLocalStorageState<'asc' | 'desc'>('books.sort.dir', 'asc')
 
   const currentViewState: BooksViewState = {
-    query,
     monitorFilter,
     missingOnly,
     cutoffOnly,
@@ -103,7 +100,6 @@ export function BooksPage() {
     currentState: currentViewState,
     presetViews: getPresetsForPage<BooksViewState>('books'),
     applyState: (state) => {
-      setQuery(state.query)
       setMonitorFilter(state.monitorFilter)
       setMissingOnly(state.missingOnly)
       setCutoffOnly(state.cutoffOnly)
@@ -233,19 +229,13 @@ export function BooksPage() {
   }, [libraryItemsQuery.data?.items, monitoredByWork, titleQuery.data, defaultProfileID, workIDs])
 
   const filteredRows = useMemo(() => {
-    const lowered = query.trim().toLowerCase()
     const filtered = rows.filter((row) => {
       if (monitorFilter === 'monitored' && !row.monitored) return false
       if (monitorFilter === 'unmonitored' && row.monitored) return false
       if (missingOnly && row.hasFile) return false
       if (cutoffOnly && !row.cutoffUnmet) return false
       if (formatFilter !== 'all' && row.bestFormat !== formatFilter) return false
-      if (!lowered) return true
-      return (
-        row.title.toLowerCase().includes(lowered) ||
-        row.author.toLowerCase().includes(lowered) ||
-        row.workID.toLowerCase().includes(lowered)
-      )
+      return true
     })
 
     const sorted = [...filtered].sort((a, b) => {
@@ -256,7 +246,7 @@ export function BooksPage() {
       return a.title.localeCompare(b.title) * dir
     })
     return sorted
-  }, [cutoffOnly, formatFilter, missingOnly, monitorFilter, query, rows, sortDir, sortKey])
+  }, [cutoffOnly, formatFilter, missingOnly, monitorFilter, rows, sortDir, sortKey])
 
   const selectedIDs = useMemo(() => filteredRows.filter((row) => selected[row.workID]).map((row) => row.workID), [filteredRows, selected])
 
@@ -311,12 +301,6 @@ export function BooksPage() {
       />
 
       <FilterBar>
-        <input
-          className="w-full sm:w-64 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-          placeholder="Filter title, author, or work id"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
         <select className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100" value={monitorFilter} onChange={(event) => setMonitorFilter(event.target.value as 'all' | 'monitored' | 'unmonitored')}>
           <option value="all">All</option>
           <option value="monitored">Monitored</option>

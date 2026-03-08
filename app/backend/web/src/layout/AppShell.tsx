@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
     items: [
       { label: 'Authors', path: '/library/authors' },
       { label: 'Books', path: '/library/books' },
-      { label: 'Series', path: '/library/series' }
+      { label: 'Add New', path: '/library/add-new' }
     ]
   },
   {

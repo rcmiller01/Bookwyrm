@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './layout/AppShell'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const AddNewPage = lazy(() => import('./pages/AddNewPage').then(m => ({ default: m.AddNewPage })))
 const AuthorsPage = lazy(() => import('./pages/AuthorsPage').then(m => ({ default: m.AuthorsPage })))
 const AuthorDetailPage = lazy(() => import('./pages/AuthorDetailPage').then(m => ({ default: m.AuthorDetailPage })))
 const BooksPage = lazy(() => import('./pages/BooksPage').then(m => ({ default: m.BooksPage })))
@@ -44,6 +45,7 @@ export function App() {
           <Route path="/library/authors" element={<AuthorsPage />} />
           <Route path="/library/authors/:authorID" element={<AuthorDetailPage />} />
           <Route path="/library/books" element={<BooksPage />} />
+          <Route path="/library/add-new" element={<AddNewPage />} />
           <Route path="/library/books/manual-search" element={<ManualSearchPage />} />
           <Route path="/library/books/:workID" element={<BookDetailPage />} />
           <Route path="/library/books/:workID/history" element={<BookHistoryPage />} />
