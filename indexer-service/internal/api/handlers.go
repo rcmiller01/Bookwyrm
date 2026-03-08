@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -220,6 +221,8 @@ func (h *Handlers) SetWantedWork(w http.ResponseWriter, r *http.Request) {
 		Languages:      body.Languages,
 	})
 	if err != nil {
+		log.Printf("set wanted work failed: work_id=%s profile_id=%s enabled=%t priority=%d cadence_minutes=%d err=%v",
+			workID, strings.TrimSpace(body.ProfileID), body.Enabled, body.Priority, body.CadenceMinutes, err)
 		writeError(w, "failed to set wanted work", http.StatusInternalServerError)
 		return
 	}
@@ -274,6 +277,8 @@ func (h *Handlers) SetWantedAuthor(w http.ResponseWriter, r *http.Request) {
 		Languages:      body.Languages,
 	})
 	if err != nil {
+		log.Printf("set wanted author failed: author_id=%s profile_id=%s enabled=%t priority=%d cadence_minutes=%d err=%v",
+			authorID, strings.TrimSpace(body.ProfileID), body.Enabled, body.Priority, body.CadenceMinutes, err)
 		writeError(w, "failed to set wanted author", http.StatusInternalServerError)
 		return
 	}
