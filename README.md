@@ -49,15 +49,21 @@ Screenshots are published in alpha release notes and docs once each tagged alpha
 
 ### Windows (Recommended)
 
+Windows Alpha Distribution
+
+Bookwyrm currently ships as a ZIP package for alpha testing. Extract it to a stable folder, configure the included env/config files, and launch it with the provided launcher scripts.
+
+Installer packaging is planned for a later release once code-signing and broader distribution are justified.
+
 Downloads:
 
 - [Latest release downloads](https://github.com/rcmiller01/Bookwyrm/releases/latest)
 - [v0.1.0-alpha release](https://github.com/rcmiller01/Bookwyrm/releases/tag/v0.1.0-alpha)
 
 1. Download `bookwyrm-<version>-windows.zip` from Releases.
-2. Extract to a stable folder (example: `C:\ProgramData\Bookwyrm`).
-3. Copy `config\bookwyrm.env` and `config\metadata-service.yaml` from the zip and set values for your environment.
-4. Run `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`.
+2. Extract to a stable folder root (example: `C:\ProgramData`, resulting in `C:\ProgramData\Bookwyrm`).
+3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml`.
+4. Run `scripts\start-bookwyrm.ps1` from `C:\ProgramData\Bookwyrm` (or `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`).
 5. Open `http://localhost:8090` and complete the setup checklist.
 
 Recommended DB mode for Windows alpha: native Bookwyrm + Postgres in Docker Desktop (hybrid).

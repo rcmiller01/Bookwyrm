@@ -2,7 +2,14 @@
 # Copy to metadata-service.yaml and adjust provider settings as needed.
 
 server:
-  addr: ":8080"
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: changeme
+  dbname: bookwyrm_backend
 
 providers:
   openlibrary:
@@ -15,5 +22,6 @@ providers:
     enabled: false
 
 enrichment:
-  workers: 2
-  max_retries: 3
+  enabled: true
+  worker_count: 2
+  max_jobs_per_request: 5
