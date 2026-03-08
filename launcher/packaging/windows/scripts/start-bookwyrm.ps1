@@ -31,6 +31,17 @@ if (-not (Test-Path $envFile) -or -not (Test-Path $metaFile)) {
     throw "Missing config files. Ensure both $envFile and $metaFile exist."
 }
 
+# Ensure UI static assets path is present for backend SPA routing.
+$uiDistLine = "UI_DIST_DIR=$BaseDir\web\dist"
+$envContent = Get-Content -Path $envFile -Raw
+if ($envContent -notmatch "(?m)^\s*UI_DIST_DIR=") {
+    if (-not $envContent.EndsWith("`r`n") -and -not $envContent.EndsWith("`n")) {
+        Add-Content -Path $envFile -Value ""
+    }
+    Add-Content -Path $envFile -Value $uiDistLine
+    Write-Host "Added missing UI_DIST_DIR to $envFile"
+}
+
 if ($OpenBrowser) {
     Start-Process "http://localhost:8090" | Out-Null
 }

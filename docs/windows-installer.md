@@ -33,6 +33,8 @@ Bookwyrm/
    - `logs\`
    - `data\`
 3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml` for your environment.
+   - Required in `bookwyrm.env`: `LIBRARY_ROOT`, `DOWNLOADS_COMPLETED_PATH`, `DATABASE_DSN`, `UI_DIST_DIR`.
+   - Required in `metadata-service.yaml`: `database.host`, `database.port`, `database.user`, `database.password`, `database.dbname`.
 4. Start Bookwyrm using the helper script:
 
 ```powershell
@@ -41,6 +43,13 @@ cd C:\ProgramData\Bookwyrm
 ```
 
 5. Open `http://localhost:8090` and complete setup.
+
+Example Postgres bootstrap:
+
+```sql
+CREATE USER bookwyrm WITH PASSWORD 'bookwyrm';
+CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
+```
 
 ## Upgrade behavior
 

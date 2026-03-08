@@ -62,9 +62,21 @@ Downloads:
 
 1. Download `bookwyrm-<version>-windows.zip` from Releases.
 2. Extract to a stable folder root (example: `C:\ProgramData`, resulting in `C:\ProgramData\Bookwyrm`).
-3. Edit `config\bookwyrm.env` and `config\metadata-service.yaml`.
-4. Run `scripts\start-bookwyrm.ps1` from `C:\ProgramData\Bookwyrm` (or `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`).
-5. Open `http://localhost:8090` and complete the setup checklist.
+3. Create Postgres DB/user (example):
+
+```sql
+CREATE USER bookwyrm WITH PASSWORD 'bookwyrm';
+CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
+```
+
+4. Edit `config\bookwyrm.env` and set at minimum:
+   - `LIBRARY_ROOT`
+   - `DOWNLOADS_COMPLETED_PATH`
+   - `DATABASE_DSN`
+   - `UI_DIST_DIR=C:\ProgramData\Bookwyrm\web\dist`
+5. Edit `config\metadata-service.yaml` database credentials to match your Postgres user/password.
+6. Run `scripts\start-bookwyrm.ps1` from `C:\ProgramData\Bookwyrm` (or `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`).
+7. Open `http://localhost:8090` and complete the setup checklist.
 
 Recommended DB mode for Windows alpha: native Bookwyrm + Postgres in Docker Desktop (hybrid).
 
