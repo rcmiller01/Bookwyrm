@@ -64,6 +64,10 @@ func main() {
 	defer pool.Close()
 	log.Info().Str("host", cfg.Database.Host).Msg("connected to database")
 
+	if err := store.RunMigrations(ctx, pool); err != nil {
+		log.Fatal().Err(err).Msg("failed to run metadata migrations")
+	}
+
 	// stores
 	providerCfgStore := store.NewProviderConfigStore(pool)
 	providerStatusStore := store.NewProviderStatusStore(pool)
