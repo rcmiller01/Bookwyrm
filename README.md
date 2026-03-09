@@ -142,7 +142,7 @@ Downloads:
 
 ```sql
 CREATE USER bookwyrm WITH PASSWORD 'bookwyrm';
-CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
+CREATE DATABASE bookwyrm OWNER bookwyrm;
 ```
 
 4. Edit `config\bookwyrm.env` and set at minimum:
@@ -155,14 +155,13 @@ CREATE DATABASE bookwyrm_backend OWNER bookwyrm;
 6. Run `scripts\start-bookwyrm.ps1` from `C:\ProgramData\Bookwyrm` (or `bin\bookwyrm-launcher.exe run --base-dir C:\ProgramData\Bookwyrm`).
 7. Open `http://localhost:8090` and complete the setup checklist.
 
-Recommended DB mode for Windows alpha: native Bookwyrm + Postgres in Docker Desktop (hybrid).
+Recommended DB mode for Windows alpha: single shared `bookwyrm` DB for all services.
 
 ### Docker / Hybrid
 
-Use `docker-compose.yml` for full-stack local deployment, or run Bookwyrm services natively and Postgres in Docker:
+Use `docker-compose.yml` for full-stack local deployment, or run Bookwyrm services natively and Postgres in Docker with the same shared DB settings.
 
-- [Docker hybrid guide](docs/docker-hybrid.md)
-- [Postgres hybrid details](docs/postgres-hybrid.md)
+Migration expectations and DB troubleshooting are documented in [docs/migrations.md](docs/migrations.md).
 
 ## Architecture Overview
 
@@ -192,10 +191,9 @@ Secrets are env/YAML driven and are not written back from UI as plain values.
 
 ## Troubleshooting and Support
 
-- [Troubleshooting](docs/troubleshooting.md)
-- [Windows native deployment](docs/windows-native.md)
-- [Postgres hybrid mode](docs/postgres-hybrid.md)
-- [Backup and restore](docs/backup-restore.md)
+- [Migration behavior and checks](docs/migrations.md)
+
+Additional Windows-native and hybrid deployment guides are distributed in release artifacts and may not be present in every source snapshot.
 
 For bug reports, export `Status -> Download Support Bundle` and attach it to the issue.
 

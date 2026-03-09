@@ -19,7 +19,6 @@ import (
 	"metadata-service/internal/enrichment/handlers"
 	"metadata-service/internal/graph"
 	"metadata-service/internal/provider"
-	"metadata-service/internal/version"
 	"metadata-service/internal/provider/annasarchive"
 	"metadata-service/internal/provider/crossref"
 	"metadata-service/internal/provider/googlebooks"
@@ -31,7 +30,7 @@ import (
 	"metadata-service/internal/recommend"
 	"metadata-service/internal/resolver"
 	"metadata-service/internal/store"
-	"metadata-service/migrations"
+	"metadata-service/internal/version"
 )
 
 func main() {
@@ -63,9 +62,6 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
 	defer pool.Close()
-	if err := migrations.Run(ctx, pool); err != nil {
-		log.Fatal().Err(err).Msg("failed to run metadata migrations")
-	}
 	log.Info().Str("host", cfg.Database.Host).Msg("connected to database")
 
 	if err := store.RunMigrations(ctx, pool); err != nil {

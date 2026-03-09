@@ -31,7 +31,7 @@ var querySchemaMigrations = func(ctx context.Context, dsn string) ([]migrationRe
 	queryCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	rows, err := db.QueryContext(queryCtx, `SELECT version, name, applied_at FROM schema_migrations ORDER BY version ASC`)
+	rows, err := db.QueryContext(queryCtx, `SELECT version, name, applied_at FROM backend_schema_migrations ORDER BY version ASC`)
 	if err != nil {
 		return nil, err
 	}
