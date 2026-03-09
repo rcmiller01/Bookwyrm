@@ -37,3 +37,7 @@ Set these env vars to enable live Prowlarr integration:
 
 - `PROWLARR_BASE_URL` (e.g. `http://localhost:9696`)
 - `PROWLARR_API_KEY`
+
+Persistence configuration:
+
+- `DATABASE_DSN` (optional; if set, indexer-service persists wanted/candidate state in Postgres and runs indexer migrations automatically)

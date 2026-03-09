@@ -1,4 +1,4 @@
-package indexer
+package migrations
 
 import (
 	"context"
@@ -12,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:embed migrations/*.up.sql
+//go:embed *.up.sql
 var migrationFS embed.FS
+
+const migrationTableName = "metadata_schema_migrations"
 
 type migrationFile struct {
 	version int
@@ -21,45 +23,39 @@ type migrationFile struct {
 	sql     string
 }
 
-const migrationTableName = "indexer_schema_migrations"
-
-func RunMigrations(ctx context.Context, db *pgxpool.Pool) error {
+func Run(ctx context.Context, db *pgxpool.Pool) error {
 	if _, err := db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS `+migrationTableName+` (
 		  version INT PRIMARY KEY,
 		  name TEXT NOT NULL,
 		  applied_at TIMESTAMP NOT NULL DEFAULT NOW()
 		)`); err != nil {
-		return fmt.Errorf("create schema_migrations: %w", err)
+		return fmt.Errorf("create schema migrations table: %w", err)
 	}
 
-	entries, err := migrationFS.ReadDir("migrations")
+	entries, err := migrationFS.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("read embedded migrations: %w", err)
 	}
 
-	migrations := make([]migrationFile, 0, len(entries))
+	files := make([]migrationFile, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
 			continue
 		}
-		version, err := parseMigrationVersion(entry.Name())
+		version, err := parseVersion(entry.Name())
 		if err != nil {
 			return err
 		}
-		content, err := migrationFS.ReadFile(filepath.ToSlash(filepath.Join("migrations", entry.Name())))
+		content, err := migrationFS.ReadFile(filepath.ToSlash(entry.Name()))
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
-		migrations = append(migrations, migrationFile{
-			version: version,
-			name:    entry.Name(),
-			sql:     string(content),
-		})
+		files = append(files, migrationFile{version: version, name: entry.Name(), sql: string(content)})
 	}
 
-	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
-	for _, migration := range migrations {
+	sort.Slice(files, func(i, j int) bool { return files[i].version < files[j].version })
+	for _, migration := range files {
 		var applied bool
 		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM `+migrationTableName+` WHERE version=$1)`, migration.version).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %d: %w", migration.version, err)
@@ -87,14 +83,14 @@ func RunMigrations(ctx context.Context, db *pgxpool.Pool) error {
 	return nil
 }
 
-func parseMigrationVersion(filename string) (int, error) {
-	parts := strings.SplitN(filename, "_", 2)
+func parseVersion(name string) (int, error) {
+	parts := strings.SplitN(name, "_", 2)
 	if len(parts) < 2 {
-		return 0, fmt.Errorf("invalid migration filename %s", filename)
+		return 0, fmt.Errorf("invalid migration filename %s", name)
 	}
 	version, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return 0, fmt.Errorf("invalid migration version %s: %w", filename, err)
+		return 0, fmt.Errorf("invalid migration version %s: %w", name, err)
 	}
 	return version, nil
 }

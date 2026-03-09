@@ -2,6 +2,82 @@
 
 Bookwyrm is a modern automated book management system inspired by the Arr ecosystem. It is built for ebooks and audiobooks, with Sonarr/Radarr-style monitoring, search, download orchestration, import/rename workflows, and explainable decisioning.
 
+## Database Model (Current Alpha)
+
+Current development defaults use a single Postgres database connection for app and indexer via `DATABASE_DSN`, while `metadata-service` uses YAML config (`metadata-service/configs/config.yaml`) with optional `DATABASE_*` environment overrides.
+
+For local/shared-db setups, all three services may safely target the same database. Each service now tracks migrations in its own migration history table:
+
+- backend: `backend_schema_migrations`
+- indexer: `indexer_schema_migrations`
+- metadata: `metadata_schema_migrations`
+
+This avoids cross-service migration version collisions when a shared Postgres database is used.
+
+Migration startup behavior:
+
+- backend: runs backend migrations when `DATABASE_DSN` is set
+- indexer: runs indexer migrations when `DATABASE_DSN` is set
+- metadata-service: runs metadata migrations on startup after DB connect
+
+## Docker Quickstart (Shared DB)
+
+Use the root compose file to run all core services against one Postgres database:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Compose automatically reads `.env` from the repo root. Override DB credentials, DB name, and host port mappings there.
+
+Services:
+
+- app-backend: `http://localhost:8090`
+- indexer-service: `http://localhost:8091`
+- metadata-service: `http://localhost:8080`
+- postgres: `localhost:5432` (`bookwyrm` / `bookwyrm`, db `bookwyrm`)
+
+The stack intentionally uses one shared DB for alpha install stability. Migration history is isolated per service (`backend_schema_migrations`, `indexer_schema_migrations`, `metadata_schema_migrations`) so startup migrations do not conflict.
+
+Startup readiness behavior in root compose:
+
+- `indexer-service` waits for Postgres `service_healthy`
+- `metadata-service` waits for Postgres `service_healthy`
+- `app-backend` waits for Postgres, metadata-service, and indexer-service `service_healthy`
+
+## Migration Behavior
+
+Migrations are automatic at service startup:
+
+- backend applies embedded migrations when `DATABASE_DSN` is set
+- indexer-service applies embedded migrations when `DATABASE_DSN` is set
+- metadata-service applies embedded migrations on startup after DB connect
+
+Manual migration execution is not required for normal local startup.
+
+See `docs/migrations.md` for details and troubleshooting queries.
+
+## Troubleshooting First-Run Issues
+
+If services are running but features fail (for example wanted items, import queue, or metadata queries), verify all services point to the same intended database for your selected install mode.
+
+Common failure patterns:
+
+- DB exists but tables are missing for one feature: service is likely pointed at the wrong DB
+- Compose variables changed but behavior did not change: existing Postgres volume may still contain old state
+
+When changing DB layout or credentials in Docker, reinitialize volumes deliberately:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Warning: `down -v` removes local Postgres data for this compose project.
+
+## Platform Modules (Phase 14)
+
 ## Why Bookwyrm
 
 Bookwyrm exists to provide an Arr-style experience for books with stronger explainability and operational support:

@@ -27,6 +27,7 @@ Application BFF layer that composes metadata-service APIs into app workflows.
 - `METADATA_SERVICE_API_KEY` (optional)
 - `INDEXER_SERVICE_URL` (default `http://localhost:8091`)
 - `INDEXER_SERVICE_API_KEY` (optional)
+- `DATABASE_DSN` (optional; if set, backend persists download/import state in Postgres and runs backend migrations automatically)
 - `QBITTORRENT_BASE_URL` (optional; enables qBittorrent adapter)
 - `QBITTORRENT_USERNAME`
 - `QBITTORRENT_PASSWORD`

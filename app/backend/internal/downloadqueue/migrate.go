@@ -20,6 +20,8 @@ type migrationFile struct {
 	sql     string
 }
 
+const migrationTableName = "backend_schema_migrations"
+
 func EmbeddedMigrationVersions() []int {
 	migrations, err := loadEmbeddedMigrations()
 	if err != nil {
@@ -42,7 +44,7 @@ func LatestEmbeddedMigrationVersion() int {
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
+		CREATE TABLE IF NOT EXISTS `+migrationTableName+` (
 		  version INT PRIMARY KEY,
 		  name TEXT NOT NULL,
 		  applied_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -57,7 +59,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 
 	for _, migration := range migrations {
 		var applied bool
-		if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1)`, migration.version).Scan(&applied); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+migrationTableName+` WHERE version=$1)`, migration.version).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %d: %w", migration.version, err)
 		}
 		if applied {
@@ -71,7 +73,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %d: %w", migration.version, err)
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, name, applied_at) VALUES ($1, $2, NOW())`, migration.version, migration.name); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO `+migrationTableName+`(version, name, applied_at) VALUES ($1, $2, NOW())`, migration.version, migration.name); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("record migration %d: %w", migration.version, err)
 		}
