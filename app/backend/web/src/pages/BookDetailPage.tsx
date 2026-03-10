@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 
 type WorkPayload = {
   work?: {
@@ -29,7 +30,15 @@ type LibraryItem = {
 
 type LibraryItemsResponse = { items: LibraryItem[] }
 
-type WantedWorksResponse = { items: Array<{ work_id: string; enabled: boolean; profile_id?: string }> }
+type WantedWorksResponse = {
+  items: Array<{
+    work_id: string
+    enabled: boolean
+    profile_id?: string
+    formats?: string[]
+    languages?: string[]
+  }>
+}
 
 type TimelinePayload = {
   timeline?: {
@@ -83,12 +92,15 @@ export function BookDetailPage() {
 
   const monitorMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
-      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`, {
-        enabled,
-        priority: 100,
-        cadence_minutes: 60,
-        profile_id: wanted?.profile_id
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`,
+        buildWantedPayload({
+          enabled,
+          profileID: wanted?.profile_id,
+          formats: wanted?.formats,
+          languages: wanted?.languages
+        })
+      )
     },
     onSuccess: async () => {
       pushToast('Monitoring updated')

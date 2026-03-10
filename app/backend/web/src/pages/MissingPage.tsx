@@ -11,6 +11,7 @@ import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 import { getPresetsForPage } from '../presets/views'
 
 type WantedWork = {
@@ -18,6 +19,8 @@ type WantedWork = {
   enabled: boolean
   priority: number
   profile_id?: string
+  formats?: string[]
+  languages?: string[]
   last_enqueued_at?: string
 }
 
@@ -128,12 +131,16 @@ export function MissingPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: async (workID: string) => {
-      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60
-      })
+    mutationFn: async (payload: { workID: string; formats?: string[]; languages?: string[]; profileID?: string }) => {
+      await postJSON(
+        `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
+        buildWantedPayload({
+          enabled: true,
+          profileID: payload.profileID,
+          formats: payload.formats,
+          languages: payload.languages
+        })
+      )
     },
     onSuccess: async () => {
       pushToast('Wanted work added')
@@ -208,7 +215,7 @@ export function MissingPage() {
     event.preventDefault()
     const workID = workIDInput.trim()
     if (!workID) return
-    createMutation.mutate(workID)
+    createMutation.mutate({ workID })
   }
 
   return (

@@ -4,14 +4,15 @@ import { PageHeader } from '../components/PageHeader'
 import { useToast } from '../components/ToastProvider'
 import { fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 
 type SearchAuthor = { id?: string; name?: string }
 type SearchWork = { id?: string; title?: string; authors?: SearchAuthor[] }
 type SearchResponse = { works?: SearchWork[] }
 
-type WantedAuthor = { author_id: string }
+type WantedAuthor = { author_id: string; formats?: string[]; languages?: string[] }
 type WantedAuthorsResponse = { items: WantedAuthor[] }
-type WantedWork = { work_id: string }
+type WantedWork = { work_id: string; formats?: string[]; languages?: string[] }
 type WantedWorksResponse = { items: WantedWork[] }
 
 export function AddNewPage() {
@@ -38,11 +39,12 @@ export function AddNewPage() {
 
   const addAuthorMutation = useMutation({
     mutationFn: async (authorID: string) => {
-      await postJSON(`/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`,
+        buildWantedPayload({
+          enabled: true
+        })
+      )
     },
     onSuccess: async () => {
       pushToast('Author added to wanted list')
@@ -54,11 +56,12 @@ export function AddNewPage() {
 
   const addWorkMutation = useMutation({
     mutationFn: async (payload: { workID: string; title: string }) => {
-      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
+        buildWantedPayload({
+          enabled: true
+        })
+      )
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
     },
     onSuccess: async () => {
@@ -169,4 +172,3 @@ export function AddNewPage() {
     </section>
   )
 }
-

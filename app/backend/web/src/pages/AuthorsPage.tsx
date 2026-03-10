@@ -12,10 +12,11 @@ import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 import { getPresetsForPage } from '../presets/views'
 
 type LibraryItemsResponse = { items: Array<{ work_id: string }> }
-type WantedAuthor = { author_id: string; enabled: boolean; profile_id?: string }
+type WantedAuthor = { author_id: string; enabled: boolean; profile_id?: string; formats?: string[]; languages?: string[] }
 type WantedAuthorsResponse = { items: WantedAuthor[] }
 type WorkIntelligenceResponse = { work?: { title?: string; authors?: Array<{ id?: string; name?: string }> } }
 type ProfilesResponse = { items: Array<{ profile: { id: string; name: string } }>; default_profile_id: string }
@@ -26,6 +27,8 @@ type AuthorRow = {
   name: string
   monitored: boolean
   profileID: string
+  formats: string[]
+  languages: string[]
   worksCount: number
   workRefs: Array<{ workID: string; title: string }>
 }
@@ -110,17 +113,20 @@ export function AuthorsPage() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: async (payload: { authorID: string; enable: boolean; profileID?: string }) => {
+    mutationFn: async (payload: { authorID: string; enable: boolean; profileID?: string; formats?: string[]; languages?: string[] }) => {
       if (!payload.enable) {
         await deleteNoContent(`/ui-api/indexer/wanted/authors/${encodeURIComponent(payload.authorID)}`)
         return
       }
-      await postJSON(`/ui-api/indexer/wanted/authors/${encodeURIComponent(payload.authorID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60,
-        profile_id: payload.profileID
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/authors/${encodeURIComponent(payload.authorID)}`,
+        buildWantedPayload({
+          enabled: true,
+          profileID: payload.profileID,
+          formats: payload.formats,
+          languages: payload.languages
+        })
+      )
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'authors'] })
@@ -151,6 +157,8 @@ export function AuthorsPage() {
           name,
           monitored: Boolean(wanted?.enabled),
           profileID: wanted?.profile_id || defaultProfileID,
+          formats: wanted?.formats ?? [],
+          languages: wanted?.languages ?? [],
           worksCount: 1,
           workRefs: [{ workID: work.workID, title: work.title }]
         })
@@ -178,7 +186,13 @@ export function AuthorsPage() {
   const applyBulkMonitor = async (enable: boolean) => {
     for (const authorID of selectedIDs) {
       const row = rows.find((entry) => entry.authorID === authorID)
-      await toggleMutation.mutateAsync({ authorID, enable, profileID: row?.profileID || defaultProfileID })
+      await toggleMutation.mutateAsync({
+        authorID,
+        enable,
+        profileID: row?.profileID || defaultProfileID,
+        formats: row?.formats,
+        languages: row?.languages
+      })
     }
     pushToast(`Updated ${selectedIDs.length} author(s)`)
   }
@@ -189,7 +203,14 @@ export function AuthorsPage() {
       return
     }
     for (const authorID of selectedIDs) {
-      await toggleMutation.mutateAsync({ authorID, enable: true, profileID: bulkProfileID.trim() })
+      const row = rows.find((entry) => entry.authorID === authorID)
+      await toggleMutation.mutateAsync({
+        authorID,
+        enable: true,
+        profileID: bulkProfileID.trim(),
+        formats: row?.formats,
+        languages: row?.languages
+      })
     }
     pushToast(`Assigned profile to ${selectedIDs.length} author(s)`)
   }
@@ -335,7 +356,19 @@ export function AuthorsPage() {
             <div className="px-3 py-2">{row.worksCount}</div>
             <div className="hidden md:block px-3 py-2">{row.monitored ? <StatusBadge label="Monitored" /> : <StatusBadge label="Unmonitored" />}</div>
             <div className="hidden md:block px-3 py-2">
-              <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300 disabled:opacity-50" disabled={!row.authorID} onClick={() => toggleMutation.mutate({ authorID: row.authorID, enable: !row.monitored, profileID: row.profileID })}>
+              <button
+                className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300 disabled:opacity-50"
+                disabled={!row.authorID}
+                onClick={() =>
+                  toggleMutation.mutate({
+                    authorID: row.authorID,
+                    enable: !row.monitored,
+                    profileID: row.profileID,
+                    formats: row.formats,
+                    languages: row.languages
+                  })
+                }
+              >
                 {row.monitored ? 'Unmonitor' : 'Monitor'}
               </button>
             </div>

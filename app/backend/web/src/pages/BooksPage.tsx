@@ -12,6 +12,7 @@ import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 import { getPresetsForPage } from '../presets/views'
 
 type LibraryItem = {
@@ -25,6 +26,8 @@ type WantedWork = {
   enabled: boolean
   profile_id?: string
   ignore_upgrades?: boolean
+  formats?: string[]
+  languages?: string[]
 }
 type WantedWorksResponse = { items: WantedWork[] }
 
@@ -47,6 +50,8 @@ type BookRow = {
   files: number
   monitored: boolean
   profileID: string
+  formats: string[]
+  languages: string[]
   hasFile: boolean
   bestFormat: string
   cutoffUnmet: boolean
@@ -165,17 +170,21 @@ export function BooksPage() {
   })
 
   const upsertWanted = useMutation({
-    mutationFn: async (payload: { workID: string; enabled: boolean; profileID?: string }) => {
+    mutationFn: async (payload: { workID: string; enabled: boolean; profileID?: string; formats?: string[]; languages?: string[]; ignoreUpgrades?: boolean }) => {
       if (!payload.enabled) {
         await deleteNoContent(`/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`)
         return
       }
-      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60,
-        profile_id: payload.profileID
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
+        buildWantedPayload({
+          enabled: true,
+          profileID: payload.profileID,
+          formats: payload.formats,
+          languages: payload.languages,
+          ignoreUpgrades: payload.ignoreUpgrades
+        })
+      )
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
@@ -220,6 +229,8 @@ export function BooksPage() {
           author: titleQuery.data?.get(workID)?.author ?? '',
           monitored: Boolean(wanted?.enabled),
           profileID: wanted?.profile_id || defaultProfileID,
+          formats: wanted?.formats ?? [],
+          languages: wanted?.languages ?? [],
           hasFile: (fileCountByWork.get(workID) ?? 0) > 0,
           bestFormat,
           cutoffUnmet: Boolean(wanted?.enabled && wanted?.ignore_upgrades !== true && (fileCountByWork.get(workID) ?? 0) > 0 && bestFormat === 'pdf')
@@ -253,7 +264,13 @@ export function BooksPage() {
   const applyBulkMonitor = async (enabled: boolean) => {
     for (const workID of selectedIDs) {
       const row = rows.find((entry) => entry.workID === workID)
-      await upsertWanted.mutateAsync({ workID, enabled, profileID: row?.profileID || defaultProfileID })
+      await upsertWanted.mutateAsync({
+        workID,
+        enabled,
+        profileID: row?.profileID || defaultProfileID,
+        formats: row?.formats,
+        languages: row?.languages
+      })
     }
     pushToast(`Applied monitor=${enabled} to ${selectedIDs.length} item(s)`)
   }
@@ -264,7 +281,14 @@ export function BooksPage() {
       return
     }
     for (const workID of selectedIDs) {
-      await upsertWanted.mutateAsync({ workID, enabled: true, profileID: bulkProfileID.trim() })
+      const row = rows.find((entry) => entry.workID === workID)
+      await upsertWanted.mutateAsync({
+        workID,
+        enabled: true,
+        profileID: bulkProfileID.trim(),
+        formats: row?.formats,
+        languages: row?.languages
+      })
     }
     pushToast(`Assigned profile to ${selectedIDs.length} item(s)`)
   }
@@ -415,7 +439,18 @@ export function BooksPage() {
             </div>
             <div className="px-3 py-2">
               <div className="flex flex-wrap gap-2">
-                <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => upsertWanted.mutate({ workID: row.workID, enabled: !row.monitored, profileID: row.profileID })}>
+                <button
+                  className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"
+                  onClick={() =>
+                    upsertWanted.mutate({
+                      workID: row.workID,
+                      enabled: !row.monitored,
+                      profileID: row.profileID,
+                      formats: row.formats,
+                      languages: row.languages
+                    })
+                  }
+                >
                   {row.monitored ? 'Unmonitor' : 'Monitor'}
                 </button>
                 <button className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300" onClick={() => searchMutation.mutate({ workID: row.workID, title: row.title })}>

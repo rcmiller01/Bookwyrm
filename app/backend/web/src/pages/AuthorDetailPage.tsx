@@ -6,9 +6,18 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { buildWantedPayload } from '../lib/wantedPayload'
 
 type LibraryItemsResponse = { items: Array<{ work_id: string; format?: string; path?: string }> }
-type WantedAuthorsResponse = { items: Array<{ author_id: string; enabled: boolean; profile_id?: string }> }
+type WantedAuthorsResponse = {
+  items: Array<{
+    author_id: string
+    enabled: boolean
+    profile_id?: string
+    formats?: string[]
+    languages?: string[]
+  }>
+}
 type WorkIntelligenceResponse = {
   work?: {
     title?: string
@@ -138,12 +147,15 @@ export function AuthorDetailPage() {
         await deleteNoContent(`/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`)
         return
       }
-      await postJSON(`/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`, {
-        enabled: true,
-        priority: 100,
-        cadence_minutes: 60,
-        profile_id: monitored?.profile_id
-      })
+      await postJSON(
+        `/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`,
+        buildWantedPayload({
+          enabled: true,
+          profileID: monitored?.profile_id,
+          formats: monitored?.formats,
+          languages: monitored?.languages
+        })
+      )
     },
     onSuccess: async () => {
       pushToast('Author monitoring updated')
