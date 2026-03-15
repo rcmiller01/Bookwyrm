@@ -44,61 +44,7 @@ func (m *Manager) EnqueueFromGrab(ctx context.Context, grabID int64, preferredCl
 	if err != nil {
 		return Job{}, err
 	}
-	payload := candidate.Candidate.GrabPayload
-	uri := firstNonEmpty(
-		asString(payload["nzb_url"]),
-		asString(payload["downloadUrl"]),
-		asString(payload["magnet"]),
-		asString(payload["torrent_url"]),
-	)
-	if uri == "" {
-		return Job{}, fmt.Errorf("candidate grab_payload missing downloadable uri")
-	}
-	protocol := strings.ToLower(strings.TrimSpace(candidate.Candidate.Protocol))
-	if protocol == "" {
-		if strings.HasPrefix(strings.ToLower(uri), "magnet:") {
-			protocol = "torrent"
-		} else {
-			protocol = "usenet"
-		}
-	}
-	clientName := strings.TrimSpace(preferredClient)
-	if clientName == "" {
-		clientName = m.pickClient(protocol)
-	}
-	if clientName == "" {
-		return Job{}, fmt.Errorf("no enabled download client for protocol %s", protocol)
-	}
-
-	if strings.TrimSpace(upgradeAction) == "" {
-		upgradeAction = "ask"
-	}
-	job, err := m.store.CreateJob(Job{
-		GrabID:        grab.ID,
-		CandidateID:   grab.CandidateID,
-		WorkID:        grab.EntityID,
-		Protocol:      protocol,
-		ClientName:    clientName,
-		UpgradeAction: upgradeAction,
-		RequestPayload: map[string]any{
-			"uri":      uri,
-			"protocol": protocol,
-			"grab_id":  grab.ID,
-		},
-		MaxAttempts: 3,
-		NotBefore:   time.Now().UTC(),
-	})
-	if err != nil {
-		return Job{}, err
-	}
-	_, _ = m.store.AddEvent(Event{
-		JobID:     job.ID,
-		EventType: "queued",
-		Message:   "download job queued from grab",
-		Data:      m.withCorrelation(job, map[string]any{"grab_id": grabID, "candidate_id": grab.CandidateID}),
-		CreatedAt: time.Now().UTC(),
-	})
-	return job, nil
+	return m.enqueueGrabCandidate(grab, candidate, preferredClient, upgradeAction, appendAttemptedCandidate(nil, grab.CandidateID))
 }
 
 func (m *Manager) Start(ctx context.Context) {
@@ -238,6 +184,32 @@ func (m *Manager) submitWorker(ctx context.Context) {
 			})
 			if addErr != nil {
 				_ = m.store.RecordClientResult(job.ClientName, false, time.Since(start), false)
+				if m.shouldTryCandidateFallback(addErr) {
+					replacement, swapped, fallbackErr := m.tryFallbackCandidate(ctx, job)
+					if swapped {
+						_ = m.store.UpdateProgress(job.ID, JobStatusFailed, "", addErr.Error())
+						_, _ = m.store.AddEvent(Event{
+							JobID:     job.ID,
+							EventType: "submit_failed",
+							Message:   addErr.Error(),
+							Data:      m.withCorrelation(job, map[string]any{"fallback_queued": true}),
+						})
+						_, _ = m.store.AddEvent(Event{
+							JobID:     job.ID,
+							EventType: "fallback_queued",
+							Message:   "replacement candidate queued after fetch failure",
+							Data: m.withCorrelation(job, map[string]any{
+								"replacement_job_id":       replacement.ID,
+								"replacement_candidate_id": replacement.CandidateID,
+								"replacement_grab_id":      replacement.GrabID,
+							}),
+						})
+						continue
+					}
+					if fallbackErr != nil {
+						addErr = fmt.Errorf("%s; fallback error: %v", addErr.Error(), fallbackErr)
+					}
+				}
 				_ = m.store.Reschedule(job.ID, addErr.Error(), time.Now().UTC().Add(backoffForAttempt(job.AttemptCount)), job.AttemptCount >= job.MaxAttempts)
 				_, _ = m.store.AddEvent(Event{
 					JobID:     job.ID,
@@ -405,6 +377,131 @@ func (m *Manager) withCorrelation(job Job, payload map[string]any) map[string]an
 	return out
 }
 
+func (m *Manager) enqueueGrabCandidate(grab indexer.GrabRecord, candidate indexer.CandidateRecord, preferredClient string, upgradeAction string, attemptedCandidates []int64) (Job, error) {
+	uri := candidateURI(candidate)
+	if uri == "" {
+		return Job{}, fmt.Errorf("candidate grab_payload missing downloadable uri")
+	}
+	protocol := strings.ToLower(strings.TrimSpace(candidate.Candidate.Protocol))
+	if protocol == "" {
+		if strings.HasPrefix(strings.ToLower(uri), "magnet:") {
+			protocol = "torrent"
+		} else {
+			protocol = "usenet"
+		}
+	}
+	clientName := strings.TrimSpace(preferredClient)
+	if clientName == "" {
+		clientName = m.pickClient(protocol)
+	}
+	if clientName == "" {
+		return Job{}, fmt.Errorf("no enabled download client for protocol %s", protocol)
+	}
+	if strings.TrimSpace(upgradeAction) == "" {
+		upgradeAction = "ask"
+	}
+
+	payload := map[string]any{
+		"uri":                     uri,
+		"protocol":                protocol,
+		"grab_id":                 grab.ID,
+		"attempted_candidate_ids": attemptedCandidates,
+	}
+	if candidate.SearchRequestID > 0 {
+		payload["search_request_id"] = candidate.SearchRequestID
+	}
+
+	job, err := m.store.CreateJob(Job{
+		GrabID:         grab.ID,
+		CandidateID:    grab.CandidateID,
+		WorkID:         grab.EntityID,
+		Protocol:       protocol,
+		ClientName:     clientName,
+		UpgradeAction:  upgradeAction,
+		RequestPayload: payload,
+		MaxAttempts:    3,
+		NotBefore:      time.Now().UTC(),
+	})
+	if err != nil {
+		return Job{}, err
+	}
+	_, _ = m.store.AddEvent(Event{
+		JobID:     job.ID,
+		EventType: "queued",
+		Message:   "download job queued from grab",
+		Data:      m.withCorrelation(job, map[string]any{"grab_id": grab.ID, "candidate_id": grab.CandidateID}),
+		CreatedAt: time.Now().UTC(),
+	})
+	return job, nil
+}
+
+func (m *Manager) shouldTryCandidateFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(message, "nzb fetch status 401") ||
+		strings.Contains(message, "nzb fetch status 403") ||
+		strings.Contains(message, "nzb fetch status 404") ||
+		strings.Contains(message, "nzb fetch status 410")
+}
+
+func (m *Manager) tryFallbackCandidate(ctx context.Context, job Job) (Job, bool, error) {
+	if m.indexerClient == nil {
+		return Job{}, false, nil
+	}
+	searchRequestID := requestSearchRequestID(job)
+	if searchRequestID == 0 {
+		candidate, err := m.indexerClient.GetCandidate(ctx, job.CandidateID)
+		if err != nil {
+			return Job{}, false, err
+		}
+		searchRequestID = candidate.SearchRequestID
+	}
+	if searchRequestID == 0 {
+		return Job{}, false, nil
+	}
+
+	candidates, err := m.indexerClient.ListCandidates(ctx, searchRequestID, 25)
+	if err != nil {
+		return Job{}, false, err
+	}
+	attempted := attemptedCandidateSet(job)
+	attempted[job.CandidateID] = struct{}{}
+	usedForWork := usedCandidateSetForWork(m.store.ListJobs(JobFilter{Limit: 500}), job.WorkID)
+
+	var lastErr error
+	for _, candidate := range candidates {
+		if candidate.ID == 0 {
+			continue
+		}
+		if _, seen := attempted[candidate.ID]; seen {
+			continue
+		}
+		if _, used := usedForWork[candidate.ID]; used {
+			continue
+		}
+		if candidateURI(candidate) == "" {
+			continue
+		}
+		if candidate.SearchRequestID == 0 {
+			candidate.SearchRequestID = searchRequestID
+		}
+		grab, grabErr := m.indexerClient.GrabCandidate(ctx, candidate.ID)
+		if grabErr != nil {
+			lastErr = grabErr
+			continue
+		}
+		replacement, enqueueErr := m.enqueueGrabCandidate(grab, candidate, job.ClientName, job.UpgradeAction, appendAttemptedCandidate(candidateIDsFromSet(attempted), candidate.ID))
+		if enqueueErr != nil {
+			lastErr = enqueueErr
+			continue
+		}
+		return replacement, true, nil
+	}
+	return Job{}, false, lastErr
+}
+
 func normalizeState(state string) JobStatus {
 	switch strings.ToLower(strings.TrimSpace(state)) {
 	case "queued", "submitted":
@@ -454,4 +551,139 @@ func min(a int, b int) int {
 		return a
 	}
 	return b
+}
+
+func candidateURI(candidate indexer.CandidateRecord) string {
+	payload := candidate.Candidate.GrabPayload
+	return firstNonEmpty(
+		asString(payload["nzb_url"]),
+		asString(payload["downloadUrl"]),
+		asString(payload["magnet"]),
+		asString(payload["torrent_url"]),
+	)
+}
+
+func requestSearchRequestID(job Job) int64 {
+	switch raw := job.RequestPayload["search_request_id"].(type) {
+	case int64:
+		return raw
+	case int:
+		return int64(raw)
+	case float64:
+		return int64(raw)
+	default:
+		return 0
+	}
+}
+
+func attemptedCandidateSet(job Job) map[int64]struct{} {
+	out := map[int64]struct{}{}
+	for _, id := range attemptedCandidateIDs(job) {
+		if id > 0 {
+			out[id] = struct{}{}
+		}
+	}
+	return out
+}
+
+func attemptedCandidateIDs(job Job) []int64 {
+	raw, ok := job.RequestPayload["attempted_candidate_ids"]
+	if !ok {
+		if job.CandidateID > 0 {
+			return []int64{job.CandidateID}
+		}
+		return nil
+	}
+	return anyToInt64Slice(raw)
+}
+
+func anyToInt64Slice(raw any) []int64 {
+	switch values := raw.(type) {
+	case []int64:
+		out := make([]int64, 0, len(values))
+		for _, value := range values {
+			if value > 0 {
+				out = append(out, value)
+			}
+		}
+		return out
+	case []int:
+		out := make([]int64, 0, len(values))
+		for _, value := range values {
+			if value > 0 {
+				out = append(out, int64(value))
+			}
+		}
+		return out
+	case []any:
+		out := make([]int64, 0, len(values))
+		for _, value := range values {
+			switch typed := value.(type) {
+			case int64:
+				if typed > 0 {
+					out = append(out, typed)
+				}
+			case int:
+				if typed > 0 {
+					out = append(out, int64(typed))
+				}
+			case float64:
+				if typed > 0 {
+					out = append(out, int64(typed))
+				}
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func appendAttemptedCandidate(existing []int64, candidateID int64) []int64 {
+	out := make([]int64, 0, len(existing)+1)
+	seen := map[int64]struct{}{}
+	for _, id := range existing {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if candidateID > 0 {
+		if _, ok := seen[candidateID]; !ok {
+			out = append(out, candidateID)
+		}
+	}
+	return out
+}
+
+func candidateIDsFromSet(values map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(values))
+	for id := range values {
+		if id > 0 {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func usedCandidateSetForWork(jobs []Job, workID string) map[int64]struct{} {
+	out := map[int64]struct{}{}
+	for _, item := range jobs {
+		if strings.TrimSpace(item.WorkID) != strings.TrimSpace(workID) {
+			continue
+		}
+		if item.CandidateID > 0 {
+			out[item.CandidateID] = struct{}{}
+		}
+		for _, id := range attemptedCandidateIDs(item) {
+			if id > 0 {
+				out[id] = struct{}{}
+			}
+		}
+	}
+	return out
 }

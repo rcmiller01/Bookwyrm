@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +46,31 @@ func (c *statusLookupClient) GetStatus(_ context.Context, downloadID string) (do
 
 func (c *statusLookupClient) Remove(_ context.Context, _ string, _ bool) error { return nil }
 
+type fallbackSubmitClient struct {
+	mu         sync.Mutex
+	addedURIs  []string
+	successIDs int
+}
+
+func (c *fallbackSubmitClient) Name() string { return "nzbget" }
+
+func (c *fallbackSubmitClient) AddDownload(_ context.Context, req download.AddRequest) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.addedURIs = append(c.addedURIs, req.URI)
+	if strings.Contains(req.URI, "forbidden") {
+		return "", fmt.Errorf("nzb fetch status 403")
+	}
+	c.successIDs++
+	return fmt.Sprintf("dl-%d", c.successIDs), nil
+}
+
+func (c *fallbackSubmitClient) GetStatus(_ context.Context, downloadID string) (download.DownloadStatus, error) {
+	return download.DownloadStatus{ID: downloadID, State: "submitted"}, nil
+}
+
+func (c *fallbackSubmitClient) Remove(_ context.Context, _ string, _ bool) error { return nil }
+
 func TestManagerEnqueueFromGrab(t *testing.T) {
 	idx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -59,8 +87,10 @@ func TestManagerEnqueueFromGrab(t *testing.T) {
 		case "/v1/indexer/candidates/id/99":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"candidate": map[string]any{
-					"id": 99,
+					"id":                99,
+					"search_request_id": 55,
 					"candidate": map[string]any{
+						"title":    "Dune",
 						"protocol": "usenet",
 						"grab_payload": map[string]any{
 							"nzb_url": "https://example.invalid/dune.nzb",
@@ -95,6 +125,13 @@ func TestManagerEnqueueFromGrab(t *testing.T) {
 	}
 	if got := asString(job.RequestPayload["uri"]); got != "https://example.invalid/dune.nzb" {
 		t.Fatalf("unexpected queued uri: %s", got)
+	}
+	if got := requestSearchRequestID(job); got != 55 {
+		t.Fatalf("expected search request id 55, got %d", got)
+	}
+	attempted := attemptedCandidateIDs(job)
+	if len(attempted) != 1 || attempted[0] != 99 {
+		t.Fatalf("expected candidate 99 to be tracked, got %v", attempted)
 	}
 	events := store.ListEvents(job.ID)
 	if len(events) == 0 {
@@ -207,4 +244,135 @@ func TestPollWorkerMarksMissingDownstreamAsFailed(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("expected job to be failed by reconciliation poll worker")
+}
+
+func TestSubmitWorkerQueuesFallbackCandidateAfterFetch403(t *testing.T) {
+	idx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/indexer/grabs/10":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"grab": map[string]any{
+					"id":           10,
+					"candidate_id": 99,
+					"entity_type":  "work",
+					"entity_id":    "work-1",
+					"status":       "created",
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/indexer/candidates/id/99":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"candidate": map[string]any{
+					"id":                99,
+					"search_request_id": 123,
+					"candidate": map[string]any{
+						"title":    "Bad candidate",
+						"protocol": "usenet",
+						"score":    0.9,
+						"grab_payload": map[string]any{
+							"nzb_url": "https://example.invalid/forbidden.nzb",
+						},
+					},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/indexer/candidates/123":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{
+					{
+						"id":                99,
+						"search_request_id": 123,
+						"candidate": map[string]any{
+							"title":        "Bad candidate",
+							"protocol":     "usenet",
+							"score":        0.9,
+							"grab_payload": map[string]any{"nzb_url": "https://example.invalid/forbidden.nzb"},
+						},
+					},
+					{
+						"id":                100,
+						"search_request_id": 123,
+						"candidate": map[string]any{
+							"title":        "Good candidate",
+							"protocol":     "usenet",
+							"score":        0.8,
+							"grab_payload": map[string]any{"nzb_url": "https://example.invalid/good.nzb"},
+						},
+					},
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/indexer/grab/100":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"grab": map[string]any{
+					"id":           11,
+					"candidate_id": 100,
+					"entity_type":  "work",
+					"entity_id":    "work-1",
+					"status":       "created",
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer idx.Close()
+
+	store := NewStore()
+	store.UpsertClient(DownloadClientRecord{ID: "nzbget", Name: "NZBGet", ClientType: "nzbget", Enabled: true, Tier: "primary", Priority: 1})
+	client := &fallbackSubmitClient{}
+	manager := NewManager(store, download.NewService(client), indexer.NewClient(indexer.Config{BaseURL: idx.URL, Timeout: time.Second}), "last_resort")
+
+	original, err := manager.EnqueueFromGrab(context.Background(), 10, "nzbget", "")
+	if err != nil {
+		t.Fatalf("enqueue from grab: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.submitWorker(ctx)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		jobs := store.ListJobs(JobFilter{Limit: 20})
+		if len(jobs) >= 2 {
+			var failedOriginal Job
+			var replacement Job
+			for _, job := range jobs {
+				if job.ID == original.ID {
+					failedOriginal = job
+				} else if job.CandidateID == 100 {
+					replacement = job
+				}
+			}
+			if failedOriginal.Status == JobStatusFailed && replacement.Status == JobStatusDownloading {
+				if failedOriginal.LastError != "nzb fetch status 403" {
+					t.Fatalf("expected original error to be preserved, got %q", failedOriginal.LastError)
+				}
+				attempted := attemptedCandidateIDs(replacement)
+				if len(attempted) != 2 || attempted[0] != 99 || attempted[1] != 100 {
+					t.Fatalf("expected fallback job to track both candidates, got %v", attempted)
+				}
+				events := store.ListEvents(original.ID)
+				foundFallbackEvent := false
+				for _, event := range events {
+					if event.EventType == "fallback_queued" {
+						foundFallbackEvent = true
+						break
+					}
+				}
+				if !foundFallbackEvent {
+					t.Fatalf("expected fallback_queued event on original job")
+				}
+				client.mu.Lock()
+				added := append([]string(nil), client.addedURIs...)
+				client.mu.Unlock()
+				if len(added) < 2 || added[0] != "https://example.invalid/forbidden.nzb" || added[1] != "https://example.invalid/good.nzb" {
+					t.Fatalf("unexpected submit order: %v", added)
+				}
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	jobs := store.ListJobs(JobFilter{Limit: 20})
+	t.Fatalf("expected fallback replacement to be queued and submitted, jobs=%+v", jobs)
 }

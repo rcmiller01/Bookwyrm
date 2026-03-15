@@ -39,8 +39,9 @@ type GrabRecord struct {
 }
 
 type CandidateRecord struct {
-	ID        int64 `json:"id"`
-	Candidate struct {
+	ID              int64 `json:"id"`
+	SearchRequestID int64 `json:"search_request_id,omitempty"`
+	Candidate       struct {
 		Protocol    string         `json:"protocol"`
 		GrabPayload map[string]any `json:"grab_payload"`
 	} `json:"candidate"`
@@ -158,7 +159,8 @@ func (c *Client) GetCandidate(ctx context.Context, candidateID int64) (Candidate
 		return CandidateRecord{}, fmt.Errorf("invalid indexer candidate response")
 	}
 	record := CandidateRecord{
-		ID: toInt64(raw["id"]),
+		ID:              toInt64(raw["id"]),
+		SearchRequestID: toInt64(raw["search_request_id"]),
 	}
 	cand, _ := raw["candidate"].(map[string]any)
 	record.Candidate.Protocol = toString(cand["protocol"])
@@ -217,4 +219,75 @@ func toInt64(v any) int64 {
 func toString(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func (c *Client) ListCandidates(ctx context.Context, requestID int64, limit int) ([]CandidateRecord, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/v1/indexer/candidates/%d?limit=%d", c.baseURL, requestID, limit), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var parsed struct {
+		Items []CandidateRecord `json:"items"`
+		Error string            `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if parsed.Error != "" {
+			return nil, fmt.Errorf("indexer-service error (%d): %s", resp.StatusCode, parsed.Error)
+		}
+		return nil, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	return parsed.Items, nil
+}
+
+func (c *Client) GrabCandidate(ctx context.Context, candidateID int64) (GrabRecord, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/indexer/grab/%d", c.baseURL, candidateID), bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		return GrabRecord{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return GrabRecord{}, err
+	}
+	defer resp.Body.Close()
+	var parsed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return GrabRecord{}, err
+	}
+	if resp.StatusCode >= 400 {
+		if msg, ok := parsed["error"].(string); ok && msg != "" {
+			return GrabRecord{}, fmt.Errorf("indexer-service error (%d): %s", resp.StatusCode, msg)
+		}
+		return GrabRecord{}, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	raw, ok := parsed["grab"].(map[string]any)
+	if !ok {
+		return GrabRecord{}, fmt.Errorf("invalid indexer grab response")
+	}
+	return GrabRecord{
+		ID:          toInt64(raw["id"]),
+		CandidateID: toInt64(raw["candidate_id"]),
+		EntityType:  toString(raw["entity_type"]),
+		EntityID:    toString(raw["entity_id"]),
+		Status:      toString(raw["status"]),
+	}, nil
 }

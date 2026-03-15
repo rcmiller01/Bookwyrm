@@ -2,9 +2,13 @@ package download
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -50,18 +54,25 @@ func (c *NZBGetClient) AddDownload(ctx context.Context, req AddRequest) (string,
 	if category == "" {
 		category = c.defaultCategory
 	}
+	filename := nzbFilenameFromURI(uri)
+	content, err := c.fetchNZB(ctx, uri)
+	if err != nil {
+		return "", err
+	}
 	params := []any{
-		uri,      // URL
-		"",       // NZB content (unused for URL mode)
-		category, // category
-		0,        // priority
-		false,    // add paused
-		"",       // dupe key
-		0,        // dupe score
-		"SCORE",  // dupe mode
+		filename,
+		base64.StdEncoding.EncodeToString(content),
+		category,
+		0,
+		false,
+		false,
+		"",
+		0,
+		"SCORE",
+		[]any{},
 	}
 	var result int
-	if err := c.rpc(ctx, "appendurl", params, &result); err != nil {
+	if err := c.rpc(ctx, "append", params, &result); err != nil {
 		return "", err
 	}
 	if result <= 0 {
@@ -77,27 +88,23 @@ func (c *NZBGetClient) GetStatus(ctx context.Context, downloadID string) (Downlo
 	}
 	target := strings.TrimSpace(downloadID)
 	for _, group := range groups {
-		id := fmt.Sprintf("%v", group["NZBID"])
-		if strings.TrimSpace(id) != target {
+		if strings.TrimSpace(fmt.Sprintf("%v", group["NZBID"])) != target {
 			continue
 		}
-		progress := 0.0
-		remaining := toFloat(group["RemainingSizeMB"])
-		downloaded := toFloat(group["DownloadedSizeMB"])
-		total := remaining + downloaded
-		if total > 0 {
-			progress = (downloaded / total) * 100.0
+		return statusFromNZBGetRecord(group), nil
+	}
+
+	var historyResp struct {
+		Result []map[string]any `json:"result"`
+	}
+	if err := c.rpc(ctx, "history", []any{false}, &historyResp.Result); err != nil {
+		return DownloadStatus{}, err
+	}
+	for _, item := range historyResp.Result {
+		if strings.TrimSpace(fmt.Sprintf("%v", item["NZBID"])) != target && strings.TrimSpace(fmt.Sprintf("%v", item["ID"])) != target {
+			continue
 		}
-		state := normalizeNZBGetState(toString(group["Status"]), progress)
-		outputPath := firstNonEmpty(toString(group["DestDir"]), toString(group["FinalDir"]), toString(group["Directory"]))
-		return DownloadStatus{
-			Client:     c.Name(),
-			ID:         id,
-			State:      state,
-			Progress:   progress,
-			OutputPath: outputPath,
-			Raw:        group,
-		}, nil
+		return statusFromNZBGetRecord(item), nil
 	}
 	return DownloadStatus{}, ErrDownloadNotFound
 }
@@ -120,6 +127,29 @@ func (c *NZBGetClient) Remove(ctx context.Context, downloadID string, deleteFile
 		return fmt.Errorf("nzbget editqueue returned false")
 	}
 	return nil
+}
+
+func (c *NZBGetClient) fetchNZB(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("nzb fetch status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("nzb fetch returned empty body")
+	}
+	return body, nil
 }
 
 func (c *NZBGetClient) rpc(ctx context.Context, method string, params []any, out any) error {
@@ -165,19 +195,42 @@ func (c *NZBGetClient) rpc(ctx context.Context, method string, params []any, out
 	return nil
 }
 
+func statusFromNZBGetRecord(record map[string]any) DownloadStatus {
+	progress := 0.0
+	remaining := toFloat(record["RemainingSizeMB"])
+	downloaded := toFloat(record["DownloadedSizeMB"])
+	total := remaining + downloaded
+	if total > 0 {
+		progress = (downloaded / total) * 100.0
+	}
+	outputPath := firstNonEmpty(toString(record["FinalDir"]), toString(record["DestDir"]), toString(record["Directory"]))
+	return DownloadStatus{
+		Client:     "nzbget",
+		ID:         strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(record["NZBID"], record["ID"]))),
+		State:      normalizeNZBGetState(toString(record["Status"]), progress),
+		Progress:   progress,
+		OutputPath: outputPath,
+		Raw:        record,
+	}
+}
+
 func normalizeNZBGetState(status string, progress float64) string {
 	lower := strings.ToLower(strings.TrimSpace(status))
 	switch {
+	case strings.Contains(lower, "dupe") || strings.Contains(lower, "deleted"):
+		return "canceled"
 	case strings.Contains(lower, "failure"):
 		return "failed"
-	case strings.Contains(lower, "repair"):
+	case strings.Contains(lower, "repair") || strings.Contains(lower, "par"):
 		return "repairing"
-	case strings.Contains(lower, "unpack"):
+	case strings.Contains(lower, "unpack") || strings.Contains(lower, "move") || strings.Contains(lower, "pp"):
 		return "unpacking"
 	case strings.Contains(lower, "paused"):
 		return "submitted"
-	case strings.Contains(lower, "success") || progress >= 100:
+	case strings.Contains(lower, "success"):
 		return "completed"
+	case progress >= 100:
+		return "downloading"
 	default:
 		return "downloading"
 	}
@@ -192,8 +245,36 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func firstNonNil(values ...any) any {
+	for _, v := range values {
+		if v != nil {
+			return v
+		}
+	}
+	return ""
+}
+
 func atoiSafe(v string) int {
 	var out int
 	_, _ = fmt.Sscanf(strings.TrimSpace(v), "%d", &out)
 	return out
+}
+
+func nzbFilenameFromURI(raw string) string {
+	fallback := "download.nzb"
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fallback
+	}
+	if base := strings.TrimSpace(path.Base(u.Path)); strings.HasSuffix(strings.ToLower(base), ".nzb") {
+		return base
+	}
+	if file := strings.TrimSpace(u.Query().Get("file")); file != "" {
+		clean := strings.NewReplacer("/", "_", "\\", "_", ":", "-", "*", "_", "?", "", "\"", "", "<", "", ">", "", "|", "_").Replace(file)
+		if !strings.HasSuffix(strings.ToLower(clean), ".nzb") {
+			clean += ".nzb"
+		}
+		return clean
+	}
+	return fallback
 }
