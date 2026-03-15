@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/ToastProvider'
-import { fetchJSON, postJSON } from '../lib/api'
+import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
 import { errorMessage } from '../lib/errorMessage'
-import { buildWantedPayload } from '../lib/wantedPayload'
+import { buildManualSearchPath } from '../lib/manualSearch'
 
 type WorkPayload = {
   work?: {
@@ -30,15 +31,7 @@ type LibraryItem = {
 
 type LibraryItemsResponse = { items: LibraryItem[] }
 
-type WantedWorksResponse = {
-  items: Array<{
-    work_id: string
-    enabled: boolean
-    profile_id?: string
-    formats?: string[]
-    languages?: string[]
-  }>
-}
+type WantedWorksResponse = { items: Array<{ work_id: string; enabled: boolean; profile_id?: string }> }
 
 type TimelinePayload = {
   timeline?: {
@@ -59,6 +52,7 @@ function normalizeRecommendation(rec: Record<string, unknown>, idx: number): { k
 export function BookDetailPage() {
   const { workID = '' } = useParams<{ workID: string }>()
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const tab = params.get('tab') || 'overview'
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
@@ -87,20 +81,20 @@ export function BookDetailPage() {
     queryFn: () => fetchJSON<TimelinePayload>(`/api/v1/work/${encodeURIComponent(workID)}/timeline`)
   })
 
+  const profilesQuery = useQuery({
+    queryKey: ['book-detail', 'profiles'],
+    queryFn: () => fetchJSON<ProfilesResponse>('/ui-api/indexer/profiles')
+  })
   const wanted = useMemo(() => (wantedQuery.data?.items ?? []).find((item) => item.work_id === workID), [wantedQuery.data?.items, workID])
   const files = useMemo(() => (libraryQuery.data?.items ?? []).filter((item) => item.work_id === workID), [libraryQuery.data?.items, workID])
 
   const monitorMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
-      await postJSON(
-        `/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`,
-        buildWantedPayload({
-          enabled,
-          profileID: wanted?.profile_id,
-          formats: wanted?.formats,
-          languages: wanted?.languages
-        })
-      )
+      if (!enabled) {
+        await deleteNoContent(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`)
+        return
+      }
+      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`, buildWantedWorkPayload(profilesQuery.data, wanted?.profile_id))
     },
     onSuccess: async () => {
       pushToast('Monitoring updated')
@@ -110,14 +104,6 @@ export function BookDetailPage() {
     onError: (error) => pushToast(errorMessage(error))
   })
 
-  const searchMutation = useMutation({
-    mutationFn: async () => {
-      const title = workQuery.data?.work?.title?.trim() || workID
-      await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(workID)}`, { title })
-    },
-    onSuccess: () => pushToast('Search queued'),
-    onError: (error) => pushToast(errorMessage(error))
-  })
 
   const timelineRows = useMemo(() => {
     const timeline = timelineQuery.data?.timeline
@@ -142,6 +128,17 @@ export function BookDetailPage() {
     return (workQuery.data?.recommendations ?? []).slice(0, 12).map(normalizeRecommendation)
   }, [workQuery.data?.recommendations])
 
+  const manualSearchPath = useMemo(() => {
+    const title = workQuery.data?.work?.title?.trim() || workID
+    const author = (workQuery.data?.work?.authors ?? []).map((entry) => entry.name?.trim()).filter(Boolean).join(', ')
+    return buildManualSearchPath({
+      workID,
+      title,
+      author,
+      formats: buildWantedWorkPayload(profilesQuery.data, wanted?.profile_id).formats
+    })
+  }, [profilesQuery.data, wanted?.profile_id, workID, workQuery.data?.work?.authors, workQuery.data?.work?.title])
+
   const setTab = (next: string) => {
     const nextParams = new URLSearchParams(params)
     nextParams.set('tab', next)
@@ -158,10 +155,10 @@ export function BookDetailPage() {
             <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!wanted?.enabled)}>
               {wanted?.enabled ? 'Unmonitor' : 'Monitor'}
             </button>
-            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => searchMutation.mutate()}>
+            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => navigate(`${manualSearchPath}&autorun=1`)}>
               Search now
             </button>
-            <Link className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" to="/library/books/manual-search">
+            <Link className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" to={manualSearchPath}>
               Manual search
             </Link>
             <Link className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" to="/library/books">
@@ -235,10 +232,10 @@ export function BookDetailPage() {
         <div className="rounded border border-slate-800 bg-slate-900/50 p-4 text-sm text-slate-200">
           <p>Manual search and candidate scoring are available in the dedicated search view.</p>
           <div className="mt-3 flex gap-2">
-            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => searchMutation.mutate()}>
+            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => navigate(`${manualSearchPath}&autorun=1`)}>
               Search now
             </button>
-            <Link className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" to="/library/books/manual-search">
+            <Link className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" to={manualSearchPath}>
               Open manual search
             </Link>
           </div>
@@ -286,7 +283,15 @@ export function BookDetailPage() {
       ) : null}
 
       {workQuery.isLoading || libraryQuery.isLoading || wantedQuery.isLoading ? <p className="text-sm text-slate-400">Loading book detail...</p> : null}
-      {workQuery.isError || libraryQuery.isError || wantedQuery.isError || timelineQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load book detail.</div> : null}
+      {workQuery.isError || libraryQuery.isError || wantedQuery.isError || timelineQuery.isError || profilesQuery.isError ? <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">Failed to load book detail.</div> : null}
     </section>
   )
 }
+
+
+
+
+
+
+
+

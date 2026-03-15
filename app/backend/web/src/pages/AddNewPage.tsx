@@ -1,21 +1,24 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../components/PageHeader'
 import { useToast } from '../components/ToastProvider'
 import { fetchJSON, postJSON } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
-import { buildWantedPayload } from '../lib/wantedPayload'
+import { buildManualSearchPath } from '../lib/manualSearch'
+import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
 
 type SearchAuthor = { id?: string; name?: string }
 type SearchWork = { id?: string; title?: string; authors?: SearchAuthor[] }
 type SearchResponse = { works?: SearchWork[] }
 
-type WantedAuthor = { author_id: string; formats?: string[]; languages?: string[] }
+type WantedAuthor = { author_id: string }
 type WantedAuthorsResponse = { items: WantedAuthor[] }
-type WantedWork = { work_id: string; formats?: string[]; languages?: string[] }
+type WantedWork = { work_id: string }
 type WantedWorksResponse = { items: WantedWork[] }
 
 export function AddNewPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
   const [query, setQuery] = useState('')
@@ -30,6 +33,10 @@ export function AddNewPage() {
     queryFn: () => fetchJSON<WantedWorksResponse>('/ui-api/indexer/wanted/works'),
     refetchInterval: 30000
   })
+  const profilesQuery = useQuery({
+    queryKey: ['settings', 'profiles', 'add-new'],
+    queryFn: () => fetchJSON<ProfilesResponse>('/ui-api/indexer/profiles')
+  })
 
   const searchQuery = useQuery({
     queryKey: ['library', 'add-new', 'search', query.trim()],
@@ -39,12 +46,11 @@ export function AddNewPage() {
 
   const addAuthorMutation = useMutation({
     mutationFn: async (authorID: string) => {
-      await postJSON(
-        `/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`,
-        buildWantedPayload({
-          enabled: true
-        })
-      )
+      await postJSON(`/ui-api/indexer/wanted/authors/${encodeURIComponent(authorID)}`, {
+        enabled: true,
+        priority: 100,
+        cadence_minutes: 60
+      })
     },
     onSuccess: async () => {
       pushToast('Author added to wanted list')
@@ -55,19 +61,27 @@ export function AddNewPage() {
   })
 
   const addWorkMutation = useMutation({
-    mutationFn: async (payload: { workID: string; title: string }) => {
+    mutationFn: async (payload: { workID: string; title: string; author: string }) => {
       await postJSON(
         `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
-        buildWantedPayload({
-          enabled: true
-        })
+        buildWantedWorkPayload(profilesQuery.data)
       )
       await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
     },
-    onSuccess: async () => {
-      pushToast('Book added and search queued')
+    onSuccess: async (_data, payload) => {
+      pushToast('Book added and monitoring enabled')
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works', 'add-new'] })
+      navigate(
+        buildManualSearchPath({
+          workID: payload.workID,
+          title: payload.title,
+          author: payload.author,
+          formats: buildWantedWorkPayload(profilesQuery.data).formats,
+          autorun: true,
+          autoGrab: true
+        })
+      )
     },
     onError: (error) => pushToast(errorMessage(error))
   })
@@ -119,6 +133,7 @@ export function AddNewPage() {
               const workID = work.id?.trim() || ''
               const title = work.title?.trim() || workID || 'Unknown'
               const subtitle = (work.authors ?? []).map((author) => author.name?.trim()).filter(Boolean).join(', ')
+              const author = subtitle
               const alreadyAdded = workID ? wantedWorkSet.has(workID) : false
               return (
                 <li key={`work:${workID || title}`} className="flex items-center justify-between gap-3 border-t border-slate-800 px-3 py-2 text-sm">
@@ -128,8 +143,8 @@ export function AddNewPage() {
                   </div>
                   <button
                     className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300 disabled:opacity-60"
-                    disabled={!workID || alreadyAdded || addWorkMutation.isPending}
-                    onClick={() => addWorkMutation.mutate({ workID, title })}
+                    disabled={!workID || alreadyAdded || addWorkMutation.isPending || profilesQuery.isLoading}
+                    onClick={() => addWorkMutation.mutate({ workID, title, author })}
                   >
                     {alreadyAdded ? 'Added' : 'Add'}
                   </button>
@@ -169,6 +184,14 @@ export function AddNewPage() {
       {query.trim().length >= 2 && !searchQuery.isLoading && rows.works.length === 0 && rows.authors.length === 0 ? (
         <p className="text-sm text-slate-400">No results found.</p>
       ) : null}
+      {profilesQuery.isError ? <p className="text-sm text-red-300">Failed to load profiles required for adding books.</p> : null}
     </section>
   )
 }
+
+
+
+
+
+
+

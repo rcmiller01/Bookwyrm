@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilterBar } from '../components/FilterBar'
 import { PageHeader } from '../components/PageHeader'
@@ -10,8 +10,9 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
 import { errorMessage } from '../lib/errorMessage'
-import { buildWantedPayload } from '../lib/wantedPayload'
+import { buildManualSearchPath } from '../lib/manualSearch'
 import { getPresetsForPage } from '../presets/views'
 
 type WantedWork = {
@@ -19,8 +20,6 @@ type WantedWork = {
   enabled: boolean
   priority: number
   profile_id?: string
-  formats?: string[]
-  languages?: string[]
   last_enqueued_at?: string
 }
 
@@ -48,12 +47,15 @@ type MissingRow = {
   lastEnqueued: string
 }
 
+type ProfilesQueryResponse = ProfilesResponse
+
 type MissingViewState = {
   query: string
   mediaType: 'all' | 'ebook' | 'audiobook'
 }
 
 export function MissingPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
   const [workIDInput, setWorkIDInput] = useState('')
@@ -80,6 +82,11 @@ export function MissingPage() {
     queryKey: ['library', 'missing', 'library-items'],
     queryFn: () => fetchJSON<LibraryItemsResponse>('/api/v1/library/items?limit=1000'),
     refetchInterval: 45000
+  })
+
+  const profilesQuery = useQuery({
+    queryKey: ['settings', 'profiles', 'missing'],
+    queryFn: () => fetchJSON<ProfilesQueryResponse>('/ui-api/indexer/profiles')
   })
 
   const libraryWorkIDs = useMemo(() => {
@@ -131,16 +138,8 @@ export function MissingPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: async (payload: { workID: string; formats?: string[]; languages?: string[]; profileID?: string }) => {
-      await postJSON(
-        `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
-        buildWantedPayload({
-          enabled: true,
-          profileID: payload.profileID,
-          formats: payload.formats,
-          languages: payload.languages
-        })
-      )
+    mutationFn: async (workID: string) => {
+      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`, buildWantedWorkPayload(profilesQuery.data))
     },
     onSuccess: async () => {
       pushToast('Wanted work added')
@@ -161,13 +160,6 @@ export function MissingPage() {
     onError: (error) => pushToast(errorMessage(error))
   })
 
-  const searchMutation = useMutation({
-    mutationFn: async (payload: { workID: string; title: string }) => {
-      await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
-    },
-    onSuccess: () => pushToast('Search request enqueued'),
-    onError: (error) => pushToast(errorMessage(error))
-  })
 
   const bulkSearchMutation = useMutation({
     mutationFn: async (payload: Array<{ workID: string; title: string }>) => {
@@ -215,7 +207,7 @@ export function MissingPage() {
     event.preventDefault()
     const workID = workIDInput.trim()
     if (!workID) return
-    createMutation.mutate({ workID })
+    createMutation.mutate(workID)
   }
 
   return (
@@ -245,7 +237,7 @@ export function MissingPage() {
             placeholder="work-123"
           />
         </label>
-        <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" disabled={createMutation.isPending} type="submit">
+        <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" disabled={createMutation.isPending || profilesQuery.isLoading} type="submit">
           Add
         </button>
       </form>
@@ -337,8 +329,17 @@ export function MissingPage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300"
-                  disabled={searchMutation.isPending}
-                  onClick={() => searchMutation.mutate({ workID: row.workID, title: row.title })}
+                  onClick={() =>
+                    navigate(
+                      buildManualSearchPath({
+                        workID: row.workID,
+                        title: row.title,
+                        author: row.author,
+                        autorun: true,
+          autoGrab: true
+                      })
+                    )
+                  }
                 >
                   Search
                 </button>
@@ -356,7 +357,7 @@ export function MissingPage() {
       />
 
       {wantedQuery.isLoading || libraryItemsQuery.isLoading ? <p className="text-sm text-slate-400">Loading missing list...</p> : null}
-      {wantedQuery.isError || libraryItemsQuery.isError || titleQuery.isError ? (
+      {wantedQuery.isError || libraryItemsQuery.isError || titleQuery.isError || profilesQuery.isError ? (
         <div className="rounded border border-red-900/80 bg-red-950/40 p-3 text-sm text-red-200">
           Failed to load missing list.
         </div>
@@ -364,3 +365,10 @@ export function MissingPage() {
     </section>
   )
 }
+
+
+
+
+
+
+

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BulkActionBar } from '../components/BulkActionBar'
 import { FilterBar } from '../components/FilterBar'
@@ -11,8 +11,9 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
+import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
 import { errorMessage } from '../lib/errorMessage'
-import { buildWantedPayload } from '../lib/wantedPayload'
+import { buildManualSearchPath } from '../lib/manualSearch'
 import { getPresetsForPage } from '../presets/views'
 
 type LibraryItem = {
@@ -26,8 +27,6 @@ type WantedWork = {
   enabled: boolean
   profile_id?: string
   ignore_upgrades?: boolean
-  formats?: string[]
-  languages?: string[]
 }
 type WantedWorksResponse = { items: WantedWork[] }
 
@@ -38,11 +37,6 @@ type WorkIntelligenceResponse = {
   }
 }
 
-type ProfilesResponse = {
-  items: Array<{ profile: { id: string; name: string } }>
-  default_profile_id: string
-}
-
 type BookRow = {
   workID: string
   title: string
@@ -50,8 +44,6 @@ type BookRow = {
   files: number
   monitored: boolean
   profileID: string
-  formats: string[]
-  languages: string[]
   hasFile: boolean
   bestFormat: string
   cutoffUnmet: boolean
@@ -79,6 +71,7 @@ const formatRank: Record<string, number> = {
 }
 
 export function BooksPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { pushToast } = useToast()
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -170,21 +163,12 @@ export function BooksPage() {
   })
 
   const upsertWanted = useMutation({
-    mutationFn: async (payload: { workID: string; enabled: boolean; profileID?: string; formats?: string[]; languages?: string[]; ignoreUpgrades?: boolean }) => {
+    mutationFn: async (payload: { workID: string; enabled: boolean; profileID?: string }) => {
       if (!payload.enabled) {
         await deleteNoContent(`/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`)
         return
       }
-      await postJSON(
-        `/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`,
-        buildWantedPayload({
-          enabled: true,
-          profileID: payload.profileID,
-          formats: payload.formats,
-          languages: payload.languages,
-          ignoreUpgrades: payload.ignoreUpgrades
-        })
-      )
+      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(payload.workID)}`, buildWantedWorkPayload(profilesQuery.data, payload.profileID))
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['wanted', 'works'] })
@@ -192,13 +176,6 @@ export function BooksPage() {
     onError: (error) => pushToast(errorMessage(error))
   })
 
-  const searchMutation = useMutation({
-    mutationFn: async (payload: { workID: string; title: string }) => {
-      await postJSON(`/ui-api/indexer/search/work/${encodeURIComponent(payload.workID)}`, { title: payload.title })
-    },
-    onSuccess: () => pushToast('Search request enqueued'),
-    onError: (error) => pushToast(errorMessage(error))
-  })
 
   const monitoredByWork = useMemo(() => new Map((wantedWorksQuery.data?.items ?? []).map((r) => [r.work_id, r])), [wantedWorksQuery.data?.items])
   const defaultProfileID = profilesQuery.data?.default_profile_id ?? ''
@@ -229,8 +206,6 @@ export function BooksPage() {
           author: titleQuery.data?.get(workID)?.author ?? '',
           monitored: Boolean(wanted?.enabled),
           profileID: wanted?.profile_id || defaultProfileID,
-          formats: wanted?.formats ?? [],
-          languages: wanted?.languages ?? [],
           hasFile: (fileCountByWork.get(workID) ?? 0) > 0,
           bestFormat,
           cutoffUnmet: Boolean(wanted?.enabled && wanted?.ignore_upgrades !== true && (fileCountByWork.get(workID) ?? 0) > 0 && bestFormat === 'pdf')
@@ -264,13 +239,7 @@ export function BooksPage() {
   const applyBulkMonitor = async (enabled: boolean) => {
     for (const workID of selectedIDs) {
       const row = rows.find((entry) => entry.workID === workID)
-      await upsertWanted.mutateAsync({
-        workID,
-        enabled,
-        profileID: row?.profileID || defaultProfileID,
-        formats: row?.formats,
-        languages: row?.languages
-      })
+      await upsertWanted.mutateAsync({ workID, enabled, profileID: row?.profileID || defaultProfileID })
     }
     pushToast(`Applied monitor=${enabled} to ${selectedIDs.length} item(s)`)
   }
@@ -281,14 +250,7 @@ export function BooksPage() {
       return
     }
     for (const workID of selectedIDs) {
-      const row = rows.find((entry) => entry.workID === workID)
-      await upsertWanted.mutateAsync({
-        workID,
-        enabled: true,
-        profileID: bulkProfileID.trim(),
-        formats: row?.formats,
-        languages: row?.languages
-      })
+      await upsertWanted.mutateAsync({ workID, enabled: true, profileID: bulkProfileID.trim() })
     }
     pushToast(`Assigned profile to ${selectedIDs.length} item(s)`)
   }
@@ -439,21 +401,23 @@ export function BooksPage() {
             </div>
             <div className="px-3 py-2">
               <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"
-                  onClick={() =>
-                    upsertWanted.mutate({
-                      workID: row.workID,
-                      enabled: !row.monitored,
-                      profileID: row.profileID,
-                      formats: row.formats,
-                      languages: row.languages
-                    })
-                  }
-                >
+                <button className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300" onClick={() => upsertWanted.mutate({ workID: row.workID, enabled: !row.monitored, profileID: row.profileID })}>
                   {row.monitored ? 'Unmonitor' : 'Monitor'}
                 </button>
-                <button className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300" onClick={() => searchMutation.mutate({ workID: row.workID, title: row.title })}>
+                <button
+                  className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300"
+                  onClick={() =>
+                    navigate(
+                      buildManualSearchPath({
+                        workID: row.workID,
+                        title: row.title,
+                        author: row.author,
+                        autorun: true,
+          autoGrab: true
+                      })
+                    )
+                  }
+                >
                   Search
                 </button>
               </div>
@@ -469,3 +433,8 @@ export function BooksPage() {
     </section>
   )
 }
+
+
+
+
+

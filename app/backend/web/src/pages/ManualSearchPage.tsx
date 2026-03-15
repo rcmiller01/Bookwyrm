@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ToastProvider'
 import { usePolling } from '../hooks/usePolling'
@@ -67,14 +68,17 @@ function isPreferred(backend: BackendRecord): boolean {
 }
 
 export function ManualSearchPage() {
+  const [params] = useSearchParams()
   const queryClient = useQueryClient()
+  const initialFormats = params.get('formats')?.trim() || 'epub'
+  const initialLanguages = params.get('languages')?.trim() || 'en'
   const { pushToast } = useToast()
 
-  const [workID, setWorkID] = useState('')
-  const [title, setTitle] = useState('')
-  const [author, setAuthor] = useState('')
-  const [formats, setFormats] = useState('epub')
-  const [languages, setLanguages] = useState('en')
+  const [workID, setWorkID] = useState(params.get('workID')?.trim() || '')
+  const [title, setTitle] = useState(params.get('title')?.trim() || '')
+  const [author, setAuthor] = useState(params.get('author')?.trim() || '')
+  const [formats, setFormats] = useState(initialFormats)
+  const [languages, setLanguages] = useState(initialLanguages)
   const [limit, setLimit] = useState(50)
   const [timeoutSec, setTimeoutSec] = useState(15)
   const [minCandidates, setMinCandidates] = useState(3)
@@ -83,6 +87,7 @@ export function ManualSearchPage() {
   const [autoHandoff, setAutoHandoff] = useState(true)
   const [searchRequestID, setSearchRequestID] = useState<number | null>(null)
   const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null)
+  const autoRunKeyRef = useRef('')
 
   const backendsQuery = useQuery({
     queryKey: ['indexers', 'backends'],
@@ -131,7 +136,8 @@ export function ManualSearchPage() {
         formats: parseCSV(formats),
         languages: parseCSV(languages),
         limit,
-        timeout_sec: timeoutSec
+        timeout_sec: timeoutSec,
+        auto_grab: params.get('autoGrab') === '1'
       }),
     onSuccess: (payload) => {
       setSearchRequestID(payload.search_request_id)
@@ -166,12 +172,32 @@ export function ManualSearchPage() {
   const candidateRows = candidatesQuery.data?.items ?? []
   const aboveThresholdCount = candidateRows.filter((row) => (row.candidate.score ?? 0) >= minScoreThreshold).length
   const stopConditionMet = aboveThresholdCount >= minCandidates
+  const currentParamsKey = params.toString()
+
+  useEffect(() => {
+    setWorkID(params.get('workID')?.trim() || '')
+    setTitle(params.get('title')?.trim() || '')
+    setAuthor(params.get('author')?.trim() || '')
+    setFormats(params.get('formats')?.trim() || 'epub')
+    setLanguages(params.get('languages')?.trim() || 'en')
+  }, [currentParamsKey, params])
+
+  useEffect(() => {
+    if (params.get('autorun') !== '1' || !workID.trim()) {
+      return
+    }
+    if (autoRunKeyRef.current === currentParamsKey) {
+      return
+    }
+    autoRunKeyRef.current = currentParamsKey
+    enqueueMutation.mutate()
+  }, [currentParamsKey, enqueueMutation, params, workID])
 
   return (
     <section className="space-y-4">
       <header>
         <h2 className="text-2xl font-semibold text-slate-100">Books</h2>
-        <p className="text-sm text-slate-400">Manual staged search and candidate grab flow.</p>
+        <p className="text-sm text-slate-400">Manual staged search and candidate grab flow. Searches do not download until you grab a candidate.</p>
       </header>
 
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
@@ -335,5 +361,8 @@ export function ManualSearchPage() {
     </section>
   )
 }
+
+
+
 
 
