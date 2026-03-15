@@ -347,17 +347,17 @@ export function ImportListPage() {
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  className="rounded bg-emerald-700 px-2 py-1 text-xs font-medium text-white"
-                  onClick={() => approveMutation.mutate({ id: selectedJob.id, workID: approveWorkID.trim(), editionID: approveEditionID.trim() })}
-                >
-                  Approve
-                </button>
-                <button
-                  className="rounded bg-emerald-700/80 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                  className="rounded bg-emerald-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
                   disabled={approveRerunning}
                   onClick={() => approveAndRerun(selectedJob.id, approveWorkID, approveEditionID)}
                 >
-                  {approveRerunning ? '⟳ Running...' : 'Approve & Rerun'}
+                  {approveRerunning ? 'Running...' : 'Approve & Run Import'}
+                </button>
+                <button
+                  className="rounded border border-emerald-700 px-2 py-1 text-xs font-medium text-emerald-300"
+                  onClick={() => approveMutation.mutate({ id: selectedJob.id, workID: approveWorkID.trim(), editionID: approveEditionID.trim() })}
+                >
+                  Approve Only
                 </button>
                 <button
                   className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300"

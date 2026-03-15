@@ -82,7 +82,7 @@ export function CandidateComparisonTable({
                       className="rounded border border-emerald-700 px-1.5 py-0.5 text-[10px] text-emerald-300"
                       onClick={() => onApprove(c.work_id!)}
                     >
-                      Approve as this
+                      Use this work ID
                     </button>
                   ) : null}
                 </td>
