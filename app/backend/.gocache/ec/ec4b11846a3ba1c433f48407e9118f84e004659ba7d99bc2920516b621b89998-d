@@ -1,0 +1,9 @@
+./engine.go
+./filescan.go
+./renamer.go
+./sanitize.go
+./store.go
+./store_memory.go
+./store_pg.go
+./template.go
+./types.go

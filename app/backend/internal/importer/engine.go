@@ -330,6 +330,9 @@ func (e *Engine) reconcileIncomingOrphans(now time.Time) (int, error) {
 }
 
 func (e *Engine) processJob(_ context.Context, job Job) error {
+	if _, err := os.Stat(job.SourcePath); err != nil {
+		return describeScanSourceError(job.SourcePath, err)
+	}
 	files, err := ScanMediaFiles(job.SourcePath, e.cfg.MaxScanFiles)
 	if err != nil {
 		return describeScanSourceError(job.SourcePath, err)

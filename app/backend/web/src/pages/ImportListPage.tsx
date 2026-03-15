@@ -9,6 +9,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON, postNoContent } from '../lib/api'
 import { errorMessage } from '../lib/errorMessage'
+import { importIssueLabel, importRecoveryHint, isMissingSourceError } from '../lib/importIssues'
 
 type ImportJob = {
   id: number
@@ -36,15 +37,6 @@ type ImportEvent = {
 type ImportJobDetailResponse = { job: ImportJob; events: ImportEvent[] }
 
 const DECISIONS = ['keep_both', 'replace_existing', 'skip'] as const
-
-function reasonLabel(value?: string): string {
-  const text = (value || '').toLowerCase()
-  if (text.includes('collision')) return 'Collision'
-  if (text.includes('confidence')) return 'Low confidence match'
-  if (text.includes('ambiguous')) return 'Ambiguous match'
-  if (text.includes('isbn')) return 'Ambiguous ISBN'
-  return value?.trim() || 'Needs review'
-}
 
 export function ImportListPage() {
   const queryClient = useQueryClient()
@@ -145,7 +137,13 @@ export function ImportListPage() {
           const detail = await fetchJSON<ImportJobDetailResponse>(`/api/v1/import/jobs/${jobId}`)
           const status = detail.job.status
           if (status !== 'needs_review' && status !== 'queued' && status !== 'running') {
-            pushToast(`Import job #${jobId}: ${status}`)
+            if (status === 'failed') {
+              const label = importIssueLabel(detail.job.last_error)
+              const hint = importRecoveryHint(detail.job.last_error)
+              pushToast(hint ? `Import job #${jobId}: ${label}. ${hint}` : `Import job #${jobId}: ${label}`)
+            } else {
+              pushToast(`Import job #${jobId}: ${status}`)
+            }
             await refreshList()
             return
           }
@@ -170,7 +168,7 @@ export function ImportListPage() {
         String(job.id).includes(lowered) ||
         (job.work_id || '').toLowerCase().includes(lowered) ||
         (job.source_path || '').toLowerCase().includes(lowered) ||
-        reasonLabel(job.last_error).toLowerCase().includes(lowered)
+        importIssueLabel(job.last_error).toLowerCase().includes(lowered)
       )
     })
   }, [listQuery.data?.items, query])
@@ -203,6 +201,8 @@ export function ImportListPage() {
   const detailEvents = useMemo(() => {
     return (detailQuery.data?.events ?? []) as ImportEvent[]
   }, [detailQuery.data?.events])
+  const selectedIssueLabel = selectedJob ? importIssueLabel(selectedJob.last_error) : ''
+  const selectedRecoveryHint = selectedJob ? importRecoveryHint(selectedJob.last_error) : null
 
   return (
     <section className="space-y-4">
@@ -259,7 +259,7 @@ export function ImportListPage() {
                 >
                   <td className="px-3 py-2">{job.id}</td>
                   <td className="px-3 py-2 text-slate-300">{job.work_id || '-'}</td>
-                  <td className="px-3 py-2"><StatusBadge label={reasonLabel(job.last_error)} /></td>
+                  <td className="px-3 py-2"><StatusBadge label={importIssueLabel(job.last_error)} /></td>
                   <td className="hidden md:table-cell max-w-xs truncate px-3 py-2 text-slate-300" title={job.source_path}>{job.source_path}</td>
                   <td className="hidden md:table-cell px-3 py-2 text-slate-300">{new Date(job.updated_at).toLocaleString()}</td>
                 </tr>
@@ -292,6 +292,14 @@ export function ImportListPage() {
                   </details>
                 ) : null}
               </div>
+
+              {isMissingSourceError(selectedJob.last_error) ? (
+                <div className="rounded border border-amber-900/60 bg-amber-950/30 p-2">
+                  <p className="text-xs font-medium text-amber-300">{selectedIssueLabel}</p>
+                  <p className="mt-0.5 text-xs text-amber-200/80">{selectedJob.last_error}</p>
+                  {selectedRecoveryHint ? <p className="mt-1 text-xs text-amber-200/80">{selectedRecoveryHint}</p> : null}
+                </div>
+              ) : null}
 
               <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
                 <p className="text-xs uppercase text-slate-400">Candidate comparison</p>

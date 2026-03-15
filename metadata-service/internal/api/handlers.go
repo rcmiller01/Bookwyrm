@@ -165,6 +165,8 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startedAt := time.Now()
+	log.Info().Str("query", q).Msg("metadata search requested")
 	works, err := h.resolver.SearchWorks(r.Context(), q)
 	if err != nil {
 		log.Error().Err(err).Str("query", q).Msg("search failed")
@@ -176,6 +178,11 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		works = []model.Work{}
 	}
 
+	log.Info().
+		Str("query", q).
+		Int("result_count", len(works)).
+		Int64("latency_ms", time.Since(startedAt).Milliseconds()).
+		Msg("metadata search completed")
 	writeJSON(w, SearchResponse{Works: works})
 }
 

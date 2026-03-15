@@ -3,7 +3,9 @@ package autograb
 import (
 	"context"
 	"log"
+	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -127,14 +129,44 @@ func (w *Worker) pickCandidate(ctx context.Context, req indexer.SearchRequestRec
 		return indexer.CandidateRecord{}, false
 	}
 	log.Printf("auto-grab: search %d returned %d candidates", req.ID, len(candidates))
+	type scoredCandidate struct {
+		record indexer.CandidateRecord
+		score  float64
+	}
+	scored := make([]scoredCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		log.Printf("auto-grab: candidate id=%d score=%.3f title=%q protocol=%s payload=%d", candidate.ID, candidate.Candidate.Score, candidate.Candidate.Title, candidate.Candidate.Protocol, len(candidate.Candidate.GrabPayload))
 		if !candidateEligible(candidate, req) {
 			continue
 		}
-		return candidate, true
+		scored = append(scored, scoredCandidate{
+			record: candidate,
+			score:  candidatePreferenceScore(candidate, req),
+		})
 	}
-	return indexer.CandidateRecord{}, false
+	if len(scored) == 0 {
+		return indexer.CandidateRecord{}, false
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if math.Abs(scored[i].score-scored[j].score) < 0.0001 {
+			return scored[i].record.Candidate.Score > scored[j].record.Candidate.Score
+		}
+		return scored[i].score > scored[j].score
+	})
+	best := scored[0]
+	log.Printf("auto-grab: selected candidate id=%d local_score=%.3f upstream_score=%.3f title=%q", best.record.ID, best.score, best.record.Candidate.Score, best.record.Candidate.Title)
+	return best.record, true
+}
+
+func candidatePreferenceScore(candidate indexer.CandidateRecord, req indexer.SearchRequestRecord) float64 {
+	title := strings.ToLower(strings.TrimSpace(candidate.Candidate.Title))
+	score := candidate.Candidate.Score
+	if containsNormalizedPhrase(title, req.Query.Title) {
+		score += 0.35
+	}
+	score += authorMatchBonus(title, req.Query.Author)
+	score += formatPreferenceBonus(title, req.Query.Preferences.Formats)
+	return score
 }
 
 func candidateEligible(candidate indexer.CandidateRecord, req indexer.SearchRequestRecord) bool {
@@ -156,6 +188,12 @@ func candidateEligible(candidate indexer.CandidateRecord, req indexer.SearchRequ
 		return false
 	}
 	if !matchesRequestedTitle(title, req.Query.Title) {
+		return false
+	}
+	if !matchesRequestedAuthor(title, req.Query.Author) {
+		return false
+	}
+	if !matchesRequestedFormat(title, req.Query.Preferences.Formats) {
 		return false
 	}
 	if !looksLikeBookRelease(title, req.Query.Preferences.Formats) {
@@ -230,6 +268,121 @@ func matchesRequestedTitle(candidateTitle string, requestedTitle string) bool {
 	return matched == len(requestedTokens)
 }
 
+func containsNormalizedPhrase(candidateTitle string, requestedTitle string) bool {
+	phrase := strings.Join(significantTokens(requestedTitle), " ")
+	return phrase != "" && strings.Contains(strings.Join(significantTokens(candidateTitle), " "), phrase)
+}
+
+func matchesRequestedAuthor(candidateTitle string, requestedAuthor string) bool {
+	authorTokens := significantTokens(requestedAuthor)
+	if len(authorTokens) == 0 {
+		return true
+	}
+	candidateTokens := tokenSet(candidateTitle)
+	matched := 0
+	for _, token := range authorTokens {
+		if _, ok := candidateTokens[token]; ok {
+			matched++
+		}
+	}
+	if matched == 0 {
+		return true
+	}
+	return matched >= minInt(2, len(authorTokens))
+}
+
+func authorMatchBonus(candidateTitle string, requestedAuthor string) float64 {
+	authorTokens := significantTokens(requestedAuthor)
+	if len(authorTokens) == 0 {
+		return 0
+	}
+	candidateTokens := tokenSet(candidateTitle)
+	matched := 0
+	for _, token := range authorTokens {
+		if _, ok := candidateTokens[token]; ok {
+			matched++
+		}
+	}
+	if matched == 0 {
+		return 0
+	}
+	return 0.12 * float64(matched) / float64(len(authorTokens))
+}
+
+func matchesRequestedFormat(candidateTitle string, preferredFormats []string) bool {
+	mode := requestedFormatMode(preferredFormats)
+	if mode == "" {
+		return true
+	}
+	hasAudio, hasEbook := releaseFormatHints(candidateTitle)
+	switch mode {
+	case "audio":
+		return hasAudio
+	case "ebook":
+		return !hasAudio || hasEbook
+	default:
+		return true
+	}
+}
+
+func formatPreferenceBonus(candidateTitle string, preferredFormats []string) float64 {
+	mode := requestedFormatMode(preferredFormats)
+	if mode == "" {
+		return 0
+	}
+	hasAudio, hasEbook := releaseFormatHints(candidateTitle)
+	switch mode {
+	case "audio":
+		if hasAudio {
+			return 0.10
+		}
+	case "ebook":
+		if hasEbook {
+			return 0.10
+		}
+		if !hasAudio {
+			return 0.04
+		}
+	}
+	return 0
+}
+
+func requestedFormatMode(preferredFormats []string) string {
+	hasAudio := false
+	hasEbook := false
+	for _, format := range preferredFormats {
+		switch strings.ToLower(strings.TrimSpace(format)) {
+		case "mp3", "m4b", "aac", "flac", "aax":
+			hasAudio = true
+		case "epub", "azw3", "mobi", "pdf", "djvu":
+			hasEbook = true
+		}
+	}
+	if hasAudio && !hasEbook {
+		return "audio"
+	}
+	if hasEbook && !hasAudio {
+		return "ebook"
+	}
+	return ""
+}
+
+func releaseFormatHints(candidateTitle string) (hasAudio bool, hasEbook bool) {
+	title := strings.ToLower(candidateTitle)
+	tokens := tokenSet(title)
+	for _, token := range []string{"audiobook", "audio", "m4b", "mp3", "aac", "flac", "aax"} {
+		if _, ok := tokens[token]; ok || strings.Contains(title, "."+token) {
+			hasAudio = true
+		}
+	}
+	for _, token := range []string{"ebook", "epub", "azw3", "mobi", "pdf", "djvu"} {
+		if _, ok := tokens[token]; ok || strings.Contains(title, "."+token) {
+			hasEbook = true
+		}
+	}
+	return hasAudio, hasEbook
+}
+
 func significantTokens(value string) []string {
 	stopwords := map[string]struct{}{
 		"a": {}, "an": {}, "and": {}, "of": {}, "the": {}, "to": {}, "in": {}, "on": {},
@@ -257,6 +410,13 @@ func tokenSet(value string) map[string]struct{} {
 		out[token] = struct{}{}
 	}
 	return out
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (w *Worker) hasExistingJob(workID string, candidateID int64) bool {

@@ -1,0 +1,5 @@
+./connection.go
+./nzbget.go
+./qbittorrent.go
+./sabnzbd.go
+./service.go

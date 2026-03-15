@@ -21,7 +21,7 @@ export function VirtualizedList<T>({
   rowKey: (row: T, index: number) => string
 }) {
   const parentRef = useRef<HTMLDivElement>(null)
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => estimateSize,

@@ -1,0 +1,7 @@
+./author.go
+./content_source.go
+./edition.go
+./enrichment.go
+./graph.go
+./identifier.go
+./work.go

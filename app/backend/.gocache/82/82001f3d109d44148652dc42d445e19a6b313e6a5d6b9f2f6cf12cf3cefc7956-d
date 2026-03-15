@@ -1,0 +1,538 @@
+# test log
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed\ebook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed\ebook\Dune.epub
+getenv HTTP_PROXY
+getenv http_proxy
+getenv HTTPS_PROXY
+getenv https_proxy
+getenv NO_PROXY
+getenv no_proxy
+getenv REQUEST_METHOD
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed\ebook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed\ebook
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\002\completed\ebook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_EbookPipeline2402957834\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\002\completed\audiobook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\Unknown Author\Track 01
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_AudiobookFolderPipeline2984886570\001\library\_incoming\1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed\upgrade-old
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed\upgrade-old\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed\upgrade-new
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed\upgrade-new\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed\upgrade-old
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed\upgrade-old
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\002\completed\upgrade-old
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed\upgrade-new
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed\upgrade-new
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\003\completed\upgrade-new
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_incoming\2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+getenv LIBRARY_TRASH_DIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_trash
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_trash\Dune.epub.20260315T174836.725872200
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_trash\Dune.epub.20260315T174836.725872200
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestGoldenE2E_CollisionUpgradeReplace2567549798\001\library\_trash
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed\job1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed\job1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed\job1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed\job1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\002\completed\job1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineImportsCompletedDownloadIntoFinalLayout1979183806\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed\job2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed\job2\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed\job2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed\job2
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\002\completed\job2
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineCollisionDifferentFileNeedsReview3214524710\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed\job4
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed\job4\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed\job4
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed\job4
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\002\completed\job4
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalseCleansStagingAfterSuccess433322461\001\library\_incoming\1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed\job5
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed\job5\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed\job5
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed\job5
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\002\completed\job5
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineKeepIncomingFalsePreservesStagingOnNeedsReview2391374579\001\library\_incoming\1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\002\completed\job3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming\1\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming\1\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\_incoming\1\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author\Some.Random.Book\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author\Some.Random.Book
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author\Some.Random.Book\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author\Some.Random.Book\Some.Random.Book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAmbiguousMatchNeedsReviewThenApproveImports570369079\001\library\Unknown Author\Some.Random.Book\Some.Random.Book.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\002\completed\audiobookA
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\1\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003\completed\audiobookB
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003\completed\audiobookB\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003\completed\audiobookB
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\003\completed\audiobookB\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\004\completed\audiobookC
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 01.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\_incoming\3\Track 02.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineAudiobookFolderCollision_IdempotentThenNeedsReview691339985\001\library\Unknown Author\Track 01\Track 02.mp3
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library\_incoming\1\leftover.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library\_incoming
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineReconcileIncomingOrphansCreatesNeedsReviewJob2319712919\001\library\_incoming
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\_incoming\1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune\Dune (copy).epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune\Dune (copy).epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune\Dune (copy).epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideKeepBothCreatesCopyAndImports1922129354\001\library\Unknown Author\Dune\Dune (copy).epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_incoming\1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune\Dune.epub
+getenv LIBRARY_TRASH_DIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_trash
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_trash\Dune.epub.20260315T174900.528752000
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_trash\Dune.epub.20260315T174900.528752000
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\Unknown Author\Dune\Dune.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineDecideReplaceExistingMovesOldToTrash4221033683\001\library\_trash
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash\Dune.epub.20260315T174900.530815900
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash\Dune.epub.20260315T174900.530815900
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash\Dune.epub.20260315T174900.530815900
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestEngineUniqueTrashPathAvoidsCollisions3312014358\001\_trash\Dune.epub.20260315T174900.530815900.1
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\src.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\dst.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\src.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\dst.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\src.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\dst.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\dst.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnCrossDeviceRename1955995152\001\src.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\src.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\dst.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\src.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\dst.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\src.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\dst.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename1050188883\001\dst.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001\completed\job-author-title
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001\completed\job-author-title\Rebecca Yarros - Fourth Wing (retail) (epub).epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001\completed\job-author-title
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestMatchJobWithWorkIDHandlesAuthorTitleFilenames3330446146\001\completed\job-author-title
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001\completed\job-fourth-wing
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001\completed\job-fourth-wing\Rebecca Yarros - Fourth Wing (retail) (epub).epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001\completed\job-fourth-wing
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSpa880089764\001\completed\job-fourth-wing
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary\Andy Weir - 2021 - Project Hail Mary
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary\Andy Weir - 2021 - Project Hail Mary\Project Hail Mary (01).mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestResolveNamingValuesUsesAudiobookFolderHints2909531047\001\completed\job-project-hail-mary\Andy Weir - 2021 - Project Hail Mary
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestProcessJobMissingSourceReturnsHelpfulError1782654944
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestProcessJobMissingSourceReturnsHelpfulError1782654944
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestProcessJobMissingSourceReturnsHelpfulError1782654944\002\missing-source
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming\99999
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming\99999\old.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming\99999
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupIncomingRemovesOldUnreferencedDirectories3757611827\001\library\_incoming\99999
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library\_trash
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library\_trash\old.epub
+getenv LIBRARY_TRASH_DIR
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library\_trash
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library\_trash\old.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestCleanupTrashRemovesOldFiles3754693819\001\library\_trash\old.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001\book.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001\notes.txt
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001\cover.jpg
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001\sample.mp3
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001\audio.m4b
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestScanMediaFilesFiltersSupportedAndIgnoresJunk2784324754\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed\job_metrics_success
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed\job_metrics_success\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed\job_metrics_success
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed\job_metrics_success
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\002\completed\job_metrics_success
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming\1\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming\1\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\_incoming\1\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\Unknown Author\MetricBook\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\Unknown Author\MetricBook
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\Unknown Author\MetricBook\MetricBook.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSuccessfulLifecycle1457851676\001\library\Unknown Author\MetricBook\MetricBook.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed\job_metrics_review
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed\job_metrics_review\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\Unknown Author\Dune
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\Unknown Author
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed\job_metrics_review
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed\job_metrics_review
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\002\completed\job_metrics_review
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\_incoming\1\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\001\library\Unknown Author\Dune\Dune.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed\Broken.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1\Broken.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1\Broken.epub
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\004\completed\job_metrics_failed
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnNeedsReviewAndFailed1893576063\003\library\_incoming\1\Broken.epub
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
+getenv GOTMPDIR
+stat C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp\TestImportMetrics_IncrementOnSkipped105175899
+open C:\Users\rcmiller\Documents\GitHub\Bookwyrm\app\backend\.gotmp
