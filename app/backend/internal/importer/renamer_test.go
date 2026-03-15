@@ -42,3 +42,39 @@ func TestBuildNamingPlan_PathLengthDeterministic(t *testing.T) {
 		t.Fatalf("expected relative path <= %d, got %d", cfg.MaxPathLen, len(relative))
 	}
 }
+
+func TestBuildNamingPlanWithValues_UsesMetadataLayout(t *testing.T) {
+	cfg := Config{
+		LibraryRoot:             "H:\\Books",
+		TemplateEbook:           "{Author}/{Title}/{Title} - {Author}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title} - {Author}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+		MaxPathLen:              240,
+		ReplaceColon:            true,
+	}
+	job := Job{WorkID: "wrk-1"}
+	values := TemplateValues{Author: "Andy Weir", Title: "Project Hail Mary", Year: "2021"}
+	plan := BuildNamingPlanWithValues(cfg, job, "H:\\Books\\_incoming\\16\\Project Hail Mary.epub", false, values)
+	want := "H:\\Books\\Andy Weir\\Project Hail Mary\\Project Hail Mary - Andy Weir.epub"
+	if plan.TargetPath != want {
+		t.Fatalf("unexpected metadata naming path\n got: %s\nwant: %s", plan.TargetPath, want)
+	}
+}
+
+func TestBuildNamingPlanWithValues_AudiobookTrackModeKeepsCommonFolder(t *testing.T) {
+	cfg := Config{
+		LibraryRoot:             "H:\\Books",
+		TemplateEbook:           "{Author}/{Title}/{Title} - {Author}.{Ext}",
+		TemplateAudiobookSingle: "{Author}/{Title}/{Title} - {Author}.{Ext}",
+		TemplateAudiobookFolder: "{Author}/{Title}",
+		MaxPathLen:              240,
+		ReplaceColon:            true,
+	}
+	job := Job{WorkID: "wrk-2"}
+	values := TemplateValues{Author: "Andy Weir", Title: "Project Hail Mary", Year: "2021"}
+	plan := BuildNamingPlanWithValues(cfg, job, "H:\\Books\\_incoming\\16\\Andy Weir - 2021 - Project Hail Mary\\Project Hail Mary (02).mp3", true, values)
+	want := "H:\\Books\\Andy Weir\\Project Hail Mary\\Project Hail Mary (02).mp3"
+	if plan.TargetPath != want {
+		t.Fatalf("unexpected audiobook track naming path\n got: %s\nwant: %s", plan.TargetPath, want)
+	}
+}

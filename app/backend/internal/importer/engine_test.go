@@ -546,6 +546,129 @@ func TestMoveOrCopy_FallbackOnCrossDeviceRename(t *testing.T) {
 	}
 }
 
+func TestMoveOrCopy_FallbackOnWindowsCrossVolumeRename(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src.epub")
+	dst := filepath.Join(root, "dst.epub")
+	mustWriteFileEngine(t, src, "copy-via-windows-cross-volume")
+
+	engine := NewEngine(Config{
+		LibraryRoot:          root,
+		AllowCrossDeviceMove: true,
+	}, NewMemoryStore(), downloadqueue.NewStore(), nil)
+	engine.renameFn = func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: fmt.Errorf("The system cannot move the file to a different disk drive.")}
+	}
+
+	if err := engine.moveOrCopy(src, dst); err != nil {
+		t.Fatalf("expected windows cross-volume fallback to succeed, got %v", err)
+	}
+	if _, err := os.Stat(dst); err != nil {
+		t.Fatalf("expected destination file to exist: %v", err)
+	}
+}
+
+func TestMatchJobWithWorkIDHandlesAuthorTitleFilenames(t *testing.T) {
+	sourceRoot := filepath.Join(t.TempDir(), "completed", "job-author-title")
+	mustWriteFileEngine(t, filepath.Join(sourceRoot, "Rebecca Yarros - Fourth Wing (retail) (epub).epub"), "content")
+
+	meta := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/work/wrk-fourth-wing" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"work":{"id":"wrk-fourth-wing","title":"Fourth Wing"}}`))
+	}))
+	defer meta.Close()
+
+	engine := NewEngine(Config{LibraryRoot: t.TempDir(), AllowCrossDeviceMove: true}, NewMemoryStore(), downloadqueue.NewStore(), metadata.NewClient(metadata.Config{BaseURL: meta.URL, Timeout: time.Second}))
+	files, err := ScanMediaFiles(sourceRoot, 10)
+	if err != nil {
+		t.Fatalf("scan media files: %v", err)
+	}
+	job, confidence, _ := engine.matchJob(Job{WorkID: "wrk-fourth-wing", SourcePath: sourceRoot}, files)
+	if confidence < 0.85 {
+		t.Fatalf("expected confident work-id match, got %f", confidence)
+	}
+	if job.WorkID != "wrk-fourth-wing" {
+		t.Fatalf("expected work id to be preserved, got %s", job.WorkID)
+	}
+}
+
+func TestResolveNamingValuesFallsBackToReleaseAuthorWhenMetadataIsSparse(t *testing.T) {
+	sourceRoot := filepath.Join(t.TempDir(), "completed", "job-fourth-wing")
+	mustWriteFileEngine(t, filepath.Join(sourceRoot, "Rebecca Yarros - Fourth Wing (retail) (epub).epub"), "content")
+
+	meta := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/work/wrk-fourth-wing" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"work":{"id":"wrk-fourth-wing","title":"Fourth Wing","first_pub_year":2024}}`))
+	}))
+	defer meta.Close()
+
+	engine := NewEngine(Config{LibraryRoot: "H:\\Books", AllowCrossDeviceMove: true}, NewMemoryStore(), downloadqueue.NewStore(), metadata.NewClient(metadata.Config{BaseURL: meta.URL, Timeout: time.Second}))
+	files, err := ScanMediaFiles(sourceRoot, 10)
+	if err != nil {
+		t.Fatalf("scan media files: %v", err)
+	}
+	values := engine.resolveNamingValues(Job{WorkID: "wrk-fourth-wing", SourcePath: sourceRoot}, files)
+	if values.Author != "Rebecca Yarros" {
+		t.Fatalf("expected release author fallback, got %q", values.Author)
+	}
+	if values.Title != "Fourth Wing" {
+		t.Fatalf("expected metadata title, got %q", values.Title)
+	}
+	if values.Year != "2024" {
+		t.Fatalf("expected publication year, got %q", values.Year)
+	}
+}
+
+func TestResolveNamingValuesUsesAudiobookFolderHints(t *testing.T) {
+	sourceRoot := filepath.Join(t.TempDir(), "completed", "job-project-hail-mary")
+	trackDir := filepath.Join(sourceRoot, "Andy Weir - 2021 - Project Hail Mary")
+	mustWriteFileEngine(t, filepath.Join(trackDir, "Project Hail Mary (01).mp3"), "audio")
+
+	meta := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/work/wrk-project-hail-mary" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"work":{"id":"wrk-project-hail-mary","title":"Project Hail Mary","first_pub_year":2021}}`))
+	}))
+	defer meta.Close()
+
+	engine := NewEngine(Config{LibraryRoot: "H:\\Books", AllowCrossDeviceMove: true}, NewMemoryStore(), downloadqueue.NewStore(), metadata.NewClient(metadata.Config{BaseURL: meta.URL, Timeout: time.Second}))
+	files, err := ScanMediaFiles(sourceRoot, 10)
+	if err != nil {
+		t.Fatalf("scan media files: %v", err)
+	}
+	values := engine.resolveNamingValues(Job{WorkID: "wrk-project-hail-mary", SourcePath: sourceRoot}, files)
+	if values.Author != "Andy Weir" {
+		t.Fatalf("expected audiobook folder author fallback, got %q", values.Author)
+	}
+	if values.Title != "Project Hail Mary" {
+		t.Fatalf("expected metadata title, got %q", values.Title)
+	}
+	if values.Year != "2021" {
+		t.Fatalf("expected year from metadata/folder, got %q", values.Year)
+	}
+}
+func TestProcessJobMissingSourceReturnsHelpfulError(t *testing.T) {
+	engine := NewEngine(Config{LibraryRoot: t.TempDir(), AllowCrossDeviceMove: true}, NewMemoryStore(), downloadqueue.NewStore(), nil)
+	missingPath := filepath.Join(t.TempDir(), "missing-source")
+	err := engine.processJob(context.Background(), Job{SourcePath: missingPath, TargetRoot: t.TempDir(), DownloadJobID: 1})
+	if err == nil {
+		t.Fatalf("expected missing source error")
+	}
+	if !strings.Contains(err.Error(), "source path no longer exists") {
+		t.Fatalf("expected helpful missing source message, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "retry the download") {
+		t.Fatalf("expected retry hint in error, got %v", err)
+	}
+}
 func TestCleanupIncomingRemovesOldUnreferencedDirectories(t *testing.T) {
 	libraryRoot := filepath.Join(t.TempDir(), "library")
 	downloadStore := downloadqueue.NewStore()

@@ -332,7 +332,7 @@ func (e *Engine) reconcileIncomingOrphans(now time.Time) (int, error) {
 func (e *Engine) processJob(_ context.Context, job Job) error {
 	files, err := ScanMediaFiles(job.SourcePath, e.cfg.MaxScanFiles)
 	if err != nil {
-		return fmt.Errorf("scan source path: %w", err)
+		return describeScanSourceError(job.SourcePath, err)
 	}
 	if len(files) == 0 {
 		return errors.New("no supported media files found in source path")
@@ -385,10 +385,11 @@ func (e *Engine) processJob(_ context.Context, job Job) error {
 			audioCount++
 		}
 	}
+	values := e.resolveNamingValues(job, files)
 	for _, f := range staged {
 		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(f.Path)), ".")
 		trackMode := isAudiobookExt(ext) && audioCount > 1
-		plans = append(plans, BuildNamingPlan(e.cfg, job, f.Path, trackMode))
+		plans = append(plans, BuildNamingPlanWithValues(e.cfg, job, f.Path, trackMode, values))
 	}
 	if len(plans) == 0 {
 		return errors.New("no staged files available for rename plan")
@@ -539,10 +540,11 @@ func (e *Engine) Decide(jobID int64, action DecisionAction) error {
 			audioCount++
 		}
 	}
+	values := e.resolveNamingValues(job, files)
 	for _, f := range files {
 		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(f.Path)), ".")
 		trackMode := isAudiobookExt(ext) && audioCount > 1
-		plans = append(plans, BuildNamingPlan(e.cfg, job, f.Path, trackMode))
+		plans = append(plans, BuildNamingPlanWithValues(e.cfg, job, f.Path, trackMode, values))
 	}
 	if len(plans) == 0 {
 		return fmt.Errorf("no rename plans generated for decision")
@@ -693,6 +695,16 @@ func cloneDecision(in map[string]any) map[string]any {
 	return out
 }
 
+func describeScanSourceError(sourcePath string, err error) error {
+	if err == nil {
+		return nil
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	if errors.Is(err, os.ErrNotExist) || strings.Contains(message, "cannot find the file specified") || strings.Contains(message, "file not found") {
+		return fmt.Errorf("source path no longer exists: %s (retry the download to recreate it)", sourcePath)
+	}
+	return fmt.Errorf("scan source path: %w", err)
+}
 func (e *Engine) moveOrCopy(src string, dst string) error {
 	if sameFile(src, dst) {
 		return nil
@@ -708,7 +720,7 @@ func (e *Engine) moveOrCopy(src string, dst string) error {
 	}
 	if err := e.renameFn(src, dst); err == nil {
 		return nil
-	} else if !errors.Is(err, syscall.EXDEV) {
+	} else if !isCrossDeviceMoveError(err) {
 		return err
 	}
 	if !e.cfg.AllowCrossDeviceMove {
@@ -726,6 +738,27 @@ func (e *Engine) moveOrCopy(src string, dst string) error {
 	return nil
 }
 
+func isCrossDeviceMoveError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EXDEV) {
+		return true
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) {
+		if errors.Is(linkErr.Err, syscall.EXDEV) {
+			return true
+		}
+		message := strings.ToLower(strings.TrimSpace(linkErr.Err.Error()))
+		if strings.Contains(message, "different disk drive") || strings.Contains(message, "not same device") {
+			return true
+		}
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(message, "different disk drive") || strings.Contains(message, "not same device")
+}
+
 func sameFile(a string, b string) bool {
 	return filepath.Clean(a) == filepath.Clean(b)
 }
@@ -735,11 +768,11 @@ func (e *Engine) matchJob(job Job, files []ScannedFile) (Job, float64, []map[str
 	if strings.TrimSpace(job.WorkID) != "" {
 		confidence := 1.0
 		candidates := []map[string]any{{"work_id": job.WorkID, "reason": "download_job_work_id"}}
-		if e.metaClient != nil && titleHint != "" {
+		if e.metaClient != nil && len(files) > 0 {
 			if workEnvelope, err := e.metaClient.GetWork(context.Background(), job.WorkID); err == nil {
 				work, _ := workEnvelope["work"].(map[string]any)
 				workTitle, _ := work["title"].(string)
-				score := scoreTitleSimilarity(titleHint, workTitle)
+				score := bestTitleHintScore(files[0].Path, titleHint, authorHint, workTitle)
 				candidates[0]["title"] = workTitle
 				candidates[0]["title_score"] = score
 				if score < 0.45 {
@@ -816,11 +849,18 @@ var isbnRegex = regexp.MustCompile(`\b(?:97[89])?\d{9}[\dXx]\b`)
 
 func parseNameHints(path string) (title string, author string, isbn string) {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	parts := strings.SplitN(base, " - ", 2)
-	if len(parts) == 2 {
+	parts := splitReleaseSegments(base)
+	switch {
+	case len(parts) >= 3 && looksLikeYear(parts[1]):
+		author = sanitizeQuery(parts[0])
+		title = sanitizeQuery(parts[2])
+	case len(parts) >= 2 && looksLikeAuthorName(parts[0]) && !looksLikeAuthorName(parts[1]):
+		author = sanitizeQuery(parts[0])
+		title = sanitizeQuery(parts[1])
+	case len(parts) >= 2:
 		title = sanitizeQuery(parts[0])
 		author = sanitizeQuery(parts[1])
-	} else {
+	default:
 		title = sanitizeQuery(base)
 		author = ""
 	}
@@ -831,6 +871,274 @@ func parseNameHints(path string) (title string, author string, isbn string) {
 func extractISBN(name string) string {
 	match := isbnRegex.FindString(name)
 	return strings.TrimSpace(match)
+}
+
+func (e *Engine) resolveNamingValues(job Job, files []ScannedFile) TemplateValues {
+	values := TemplateValues{
+		Author:      "Unknown Author",
+		Title:       "",
+		Year:        "",
+		Series:      "",
+		SeriesIndex: "",
+		WorkID:      fallback(job.WorkID, "unknown-work"),
+		EditionID:   job.EditionID,
+	}
+	if len(files) > 0 {
+		values.Title = strings.TrimSuffix(filepath.Base(files[0].Path), filepath.Ext(files[0].Path))
+	}
+	applyFallbackNamingHints(&values, files)
+	if e.metaClient == nil || strings.TrimSpace(job.WorkID) == "" {
+		return values
+	}
+	workEnvelope, err := e.metaClient.GetWork(context.Background(), job.WorkID)
+	if err != nil {
+		return values
+	}
+	work, _ := workEnvelope["work"].(map[string]any)
+	if title, ok := work["title"].(string); ok && strings.TrimSpace(title) != "" {
+		values.Title = strings.TrimSpace(title)
+	}
+	if year, ok := work["first_pub_year"].(float64); ok && year > 0 {
+		values.Year = strconv.Itoa(int(year))
+	}
+	if authors, ok := work["authors"].([]any); ok {
+		for _, raw := range authors {
+			if authorMap, mapOK := raw.(map[string]any); mapOK {
+				if name, ok := authorMap["name"].(string); ok && strings.TrimSpace(name) != "" {
+					values.Author = strings.TrimSpace(name)
+					break
+				}
+			}
+			if name, ok := raw.(string); ok && strings.TrimSpace(name) != "" {
+				values.Author = strings.TrimSpace(name)
+				break
+			}
+		}
+	}
+	applyFallbackNamingHints(&values, files)
+	return values
+}
+
+func applyFallbackNamingHints(values *TemplateValues, files []ScannedFile) {
+	if values == nil || len(files) == 0 {
+		return
+	}
+	hints := inferReleaseHints(files[0].Path, values.Title)
+	if strings.TrimSpace(values.Author) == "" || strings.EqualFold(strings.TrimSpace(values.Author), "Unknown Author") {
+		if strings.TrimSpace(hints.Author) != "" {
+			values.Author = hints.Author
+		}
+	}
+	if strings.TrimSpace(values.Title) == "" && strings.TrimSpace(hints.Title) != "" {
+		values.Title = hints.Title
+	}
+	if strings.TrimSpace(values.Year) == "" && strings.TrimSpace(hints.Year) != "" {
+		values.Year = hints.Year
+	}
+}
+
+type releaseHints struct {
+	Author string
+	Title  string
+	Year   string
+}
+
+func inferReleaseHints(path string, knownTitle string) releaseHints {
+	candidates := []string{
+		strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+		filepath.Base(filepath.Dir(path)),
+		filepath.Base(filepath.Dir(filepath.Dir(path))),
+	}
+	best := releaseHints{}
+	for _, candidate := range candidates {
+		hints := inferReleaseHintsFromName(candidate, knownTitle)
+		if strings.TrimSpace(best.Title) == "" && strings.TrimSpace(hints.Title) != "" {
+			best.Title = hints.Title
+		}
+		if strings.TrimSpace(best.Year) == "" && strings.TrimSpace(hints.Year) != "" {
+			best.Year = hints.Year
+		}
+		if strings.TrimSpace(hints.Author) != "" {
+			best.Author = hints.Author
+			if strings.TrimSpace(best.Title) == "" {
+				best.Title = hints.Title
+			}
+			if strings.TrimSpace(best.Year) == "" {
+				best.Year = hints.Year
+			}
+			return best
+		}
+	}
+	return best
+}
+
+func inferReleaseHintsFromName(name string, knownTitle string) releaseHints {
+	cleanName := strings.TrimSpace(name)
+	if cleanName == "" || cleanName == "." {
+		return releaseHints{}
+	}
+	segments := splitReleaseSegments(cleanName)
+	hints := releaseHints{}
+	if strings.TrimSpace(knownTitle) != "" {
+		if match := inferReleaseHintsAroundTitle(cleanName, knownTitle); strings.TrimSpace(match.Author) != "" || strings.TrimSpace(match.Title) != "" {
+			return match
+		}
+	}
+	if len(segments) >= 3 && looksLikeYear(segments[1]) {
+		hints.Author = sanitizeQuery(segments[0])
+		hints.Title = sanitizeQuery(segments[2])
+		hints.Year = normalizeYear(segments[1])
+		return hints
+	}
+	if len(segments) >= 2 && looksLikeAuthorName(segments[0]) {
+		hints.Author = sanitizeQuery(segments[0])
+		hints.Title = sanitizeQuery(segments[1])
+		if len(segments) >= 3 && looksLikeYear(segments[2]) {
+			hints.Year = normalizeYear(segments[2])
+		}
+		return hints
+	}
+	return releaseHints{}
+}
+
+func inferReleaseHintsAroundTitle(name string, knownTitle string) releaseHints {
+	normalizedName := strings.ToLower(sanitizeQuery(name))
+	normalizedTitle := strings.ToLower(sanitizeQuery(knownTitle))
+	if normalizedName == "" || normalizedTitle == "" {
+		return releaseHints{}
+	}
+	idx := strings.Index(normalizedName, normalizedTitle)
+	if idx < 0 {
+		return releaseHints{}
+	}
+	original := sanitizeQuery(name)
+	prefix := strings.Trim(strings.TrimSpace(original[:idx]), " -")
+	suffix := strings.Trim(strings.TrimSpace(original[idx+len(normalizedTitle):]), " -")
+	hints := releaseHints{Title: strings.TrimSpace(knownTitle)}
+	if year := findYear(prefix + " " + suffix); year != "" {
+		hints.Year = year
+	}
+	if author := pickAuthorCandidate(prefix); author != "" {
+		hints.Author = author
+		return hints
+	}
+	if author := pickAuthorCandidate(suffix); author != "" {
+		hints.Author = author
+	}
+	return hints
+}
+
+func pickAuthorCandidate(raw string) string {
+	segments := splitReleaseSegments(raw)
+	filtered := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if isNoiseSegment(segment) || looksLikeYear(segment) {
+			continue
+		}
+		filtered = append(filtered, sanitizeQuery(segment))
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	if looksLikeAuthorName(filtered[0]) {
+		return filtered[0]
+	}
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+	return ""
+}
+
+func splitReleaseSegments(name string) []string {
+	raw := strings.Split(name, " - ")
+	out := make([]string, 0, len(raw))
+	for _, part := range raw {
+		part = strings.TrimSpace(stripBracketedNoise(part))
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func stripBracketedNoise(value string) string {
+	replacer := regexp.MustCompile(`[\(\[][^(\])]*[\)\]]`)
+	clean := replacer.ReplaceAllString(value, "")
+	return strings.Join(strings.Fields(clean), " ")
+}
+
+func looksLikeAuthorName(value string) bool {
+	value = sanitizeQuery(value)
+	if value == "" {
+		return false
+	}
+	if strings.ContainsAny(value, "0123456789") {
+		return false
+	}
+	tokens := strings.Fields(value)
+	if len(tokens) < 2 || len(tokens) > 5 {
+		return false
+	}
+	for _, token := range tokens {
+		if len(token) == 1 {
+			continue
+		}
+		if token != strings.Title(strings.ToLower(token)) && token != strings.ToUpper(token) {
+			return false
+		}
+	}
+	return true
+}
+
+func looksLikeYear(value string) bool {
+	return normalizeYear(value) != ""
+}
+
+func normalizeYear(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) != 4 {
+		return ""
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	if value < "1500" || value > "2100" {
+		return ""
+	}
+	return value
+}
+
+func findYear(value string) string {
+	yearRegex := regexp.MustCompile(`\b(1[5-9]\d{2}|20\d{2}|2100)\b`)
+	match := yearRegex.FindString(value)
+	return normalizeYear(match)
+}
+
+func isNoiseSegment(value string) bool {
+	v := strings.ToLower(strings.TrimSpace(stripBracketedNoise(value)))
+	if v == "" {
+		return true
+	}
+	switch v {
+	case "retail", "ebook", "audiobook", "unabridged", "illustrated", "epub", "azw3", "mobi", "pdf", "mp3", "m4b", "flac":
+		return true
+	}
+	return false
+}
+func bestTitleHintScore(path string, titleHint string, authorHint string, workTitle string) float64 {
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	candidates := []string{titleHint, authorHint, sanitizeQuery(base)}
+	best := 0.0
+	for _, candidate := range candidates {
+		score := scoreTitleSimilarity(candidate, workTitle)
+		if score > best {
+			best = score
+		}
+	}
+	return best
 }
 
 func scoreTitleSimilarity(a string, b string) float64 {

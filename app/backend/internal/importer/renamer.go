@@ -13,17 +13,19 @@ type NamingPlan struct {
 }
 
 func BuildNamingPlan(cfg Config, job Job, sourcePath string, audiobookTrackMode bool) NamingPlan {
+	return BuildNamingPlanWithValues(cfg, job, sourcePath, audiobookTrackMode, defaultTemplateValues(job, sourcePath))
+}
+
+func BuildNamingPlanWithValues(cfg Config, job Job, sourcePath string, audiobookTrackMode bool, values TemplateValues) NamingPlan {
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(sourcePath)), ".")
-	title := strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
-	values := TemplateValues{
-		Author:      "Unknown Author",
-		Title:       title,
-		Year:        "",
-		Series:      "",
-		SeriesIndex: "",
-		Ext:         ext,
-		WorkID:      fallback(job.WorkID, "unknown-work"),
-		EditionID:   job.EditionID,
+	values.Ext = ext
+	values.WorkID = fallback(job.WorkID, "unknown-work")
+	values.EditionID = job.EditionID
+	if strings.TrimSpace(values.Author) == "" {
+		values.Author = "Unknown Author"
+	}
+	if strings.TrimSpace(values.Title) == "" {
+		values.Title = strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
 	}
 	var rel string
 	if isAudiobookExt(ext) && audiobookTrackMode {
@@ -44,6 +46,19 @@ func BuildNamingPlan(cfg Config, job Job, sourcePath string, audiobookTrackMode 
 		SourcePath: sourcePath,
 		TargetPath: target,
 		Format:     ext,
+	}
+}
+
+func defaultTemplateValues(job Job, sourcePath string) TemplateValues {
+	return TemplateValues{
+		Author:      "Unknown Author",
+		Title:       strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath)),
+		Year:        "",
+		Series:      "",
+		SeriesIndex: "",
+		Ext:         strings.TrimPrefix(strings.ToLower(filepath.Ext(sourcePath)), "."),
+		WorkID:      fallback(job.WorkID, "unknown-work"),
+		EditionID:   job.EditionID,
 	}
 }
 
