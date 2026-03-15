@@ -32,6 +32,7 @@ func (b *Backend) Search(ctx context.Context, q indexer.QuerySpec) ([]indexer.Ca
 			WorkID: b.id + ":" + q.EntityID,
 			Title:  q.Title,
 		},
+		PreferredFormats: append([]string(nil), q.Preferences.Formats...),
 	}
 	if q.Author != "" {
 		req.Metadata.Authors = []string{q.Author}

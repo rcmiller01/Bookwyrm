@@ -53,7 +53,7 @@ func (a *ProwlarrAdapter) HealthCheck(ctx context.Context) error {
 }
 
 func (a *ProwlarrAdapter) Search(ctx context.Context, req SearchRequest) (SearchResult, error) {
-	query := buildQuery(req.Metadata)
+	query := buildQuery(req)
 	endpoint := a.baseURL + "/api/v1/search?query=" + url.QueryEscape(query) + "&type=search&limit=50"
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -103,7 +103,8 @@ func (a *ProwlarrAdapter) setHeaders(req *http.Request) {
 	}
 }
 
-func buildQuery(m MetadataSnapshot) string {
+func buildQuery(req SearchRequest) string {
+	m := req.Metadata
 	if strings.TrimSpace(m.ISBN13) != "" {
 		return strings.TrimSpace(m.ISBN13)
 	}
@@ -114,10 +115,56 @@ func buildQuery(m MetadataSnapshot) string {
 	if title == "" {
 		title = strings.TrimSpace(m.WorkID)
 	}
+	parts := []string{}
+	if title != "" {
+		parts = append(parts, quoteIfNeeded(title))
+	}
 	if len(m.Authors) > 0 && strings.TrimSpace(m.Authors[0]) != "" {
-		return title + " " + strings.TrimSpace(m.Authors[0])
+		parts = append(parts, strings.TrimSpace(m.Authors[0]))
+	}
+	if format := preferredFormatToken(req.PreferredFormats); format != "" {
+		parts = append(parts, format)
+	}
+	query := strings.Join(parts, " ")
+	if strings.TrimSpace(query) != "" {
+		return query
 	}
 	return title
+}
+
+func preferredFormatToken(formats []string) string {
+	preferredOrder := []string{"epub", "azw3", "mobi", "pdf", "m4b", "mp3"}
+	set := map[string]struct{}{}
+	for _, format := range formats {
+		format = strings.ToLower(strings.TrimSpace(format))
+		if format == "" {
+			continue
+		}
+		set[format] = struct{}{}
+	}
+	for _, format := range preferredOrder {
+		if _, ok := set[format]; ok {
+			return format
+		}
+	}
+	for _, format := range formats {
+		format = strings.ToLower(strings.TrimSpace(format))
+		if format != "" {
+			return format
+		}
+	}
+	return ""
+}
+
+func quoteIfNeeded(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.ContainsAny(value, " \t") {
+		return fmt.Sprintf("\"%s\"", value)
+	}
+	return fmt.Sprintf("\"%s\"", value)
 }
 
 func mapProwlarrCandidate(m MetadataSnapshot, item map[string]any, idx int) Candidate {

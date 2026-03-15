@@ -119,6 +119,7 @@ func (h *Handlers) EnqueueWorkSearch(w http.ResponseWriter, r *http.Request) {
 		Languages  []string `json:"languages"`
 		Limit      int      `json:"limit"`
 		TimeoutSec int      `json:"timeout_sec"`
+		AutoGrab   bool     `json:"auto_grab"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
@@ -134,9 +135,7 @@ func (h *Handlers) EnqueueWorkSearch(w http.ResponseWriter, r *http.Request) {
 	spec.Preferences.Languages = body.Languages
 	spec.Limits.MaxCandidates = body.Limit
 	spec.Limits.TimeoutSec = body.TimeoutSec
-	if spec.Title == "" {
-		spec.Title = workID
-	}
+	spec.AutoGrab = body.AutoGrab
 	req := h.orchestrator.Enqueue(spec)
 	writeJSON(w, map[string]any{
 		"search_request_id": req.ID,
@@ -397,6 +396,26 @@ func (h *Handlers) GetSearchRequest(w http.ResponseWriter, r *http.Request) {
 		"request":        rec,
 		"top_candidates": candidates,
 	})
+}
+
+func (h *Handlers) ListSearchRequests(w http.ResponseWriter, r *http.Request) {
+	filter := indexer.SearchRequestFilter{
+		Status:     strings.TrimSpace(r.URL.Query().Get("status")),
+		EntityType: strings.TrimSpace(r.URL.Query().Get("entity_type")),
+		EntityID:   strings.TrimSpace(r.URL.Query().Get("entity_id")),
+		Limit:      50,
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 {
+			filter.Limit = parsed
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("updated_after")); raw != "" {
+		if parsed, parseErr := time.Parse(time.RFC3339, raw); parseErr == nil {
+			filter.UpdatedAfter = &parsed
+		}
+	}
+	writeJSON(w, map[string]any{"items": h.store.ListSearchRequests(filter)})
 }
 
 func (h *Handlers) ListCandidates(w http.ResponseWriter, r *http.Request) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -11,12 +12,13 @@ import (
 )
 
 type Orchestrator struct {
-	store               Storage
-	backends            map[string]SearchBackend
-	quarantineMode      string
-	candidateLimit      int
-	maxEnqueuesPerTick  int
-	once                sync.Once
+	store              Storage
+	backends           map[string]SearchBackend
+	metadataClient     *MetadataClient
+	quarantineMode     string
+	candidateLimit     int
+	maxEnqueuesPerTick int
+	once               sync.Once
 }
 
 func NewOrchestrator(store Storage, quarantineMode string) *Orchestrator {
@@ -30,6 +32,10 @@ func NewOrchestrator(store Storage, quarantineMode string) *Orchestrator {
 		candidateLimit:     50,
 		maxEnqueuesPerTick: 5,
 	}
+}
+
+func (o *Orchestrator) SetMetadataClient(client *MetadataClient) {
+	o.metadataClient = client
 }
 
 func (o *Orchestrator) SetCandidateRetention(limit int) {
@@ -69,11 +75,51 @@ func (o *Orchestrator) Start(ctx context.Context, workerCount int) {
 }
 
 func (o *Orchestrator) Enqueue(query QuerySpec) SearchRequestRecord {
+	query = o.hydrateQuery(query)
 	reqKey := buildRequestKey(query)
 	rec := o.store.CreateOrGetSearchRequest(reqKey, query, 3)
 	return rec
 }
 
+func (o *Orchestrator) hydrateQuery(query QuerySpec) QuerySpec {
+	if strings.TrimSpace(query.EntityType) != "work" || o.metadataClient == nil {
+		return query
+	}
+
+	titleMissing := strings.TrimSpace(query.Title) == "" || strings.TrimSpace(query.Title) == strings.TrimSpace(query.EntityID)
+	authorMissing := strings.TrimSpace(query.Author) == ""
+	isbnMissing := strings.TrimSpace(query.ISBN) == ""
+	languagesMissing := len(query.Preferences.Languages) == 0
+	if !titleMissing && !authorMissing && !isbnMissing && !languagesMissing {
+		return query
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	work, err := o.metadataClient.GetWork(ctx, query.EntityID)
+	if err != nil {
+		return query
+	}
+	if titleMissing && strings.TrimSpace(work.Title) != "" {
+		query.Title = strings.TrimSpace(work.Title)
+	}
+	if authorMissing && len(work.Authors) > 0 {
+		query.Author = strings.TrimSpace(work.Authors[0])
+	}
+	if isbnMissing {
+		switch {
+		case strings.TrimSpace(work.ISBN13) != "":
+			query.ISBN = strings.TrimSpace(work.ISBN13)
+		case strings.TrimSpace(work.ISBN10) != "":
+			query.ISBN = strings.TrimSpace(work.ISBN10)
+		}
+	}
+	if languagesMissing && strings.TrimSpace(work.Language) != "" {
+		query.Preferences.Languages = []string{strings.TrimSpace(work.Language)}
+	}
+	return query
+}
 func (o *Orchestrator) ProcessRequest(ctx context.Context, requestID int64) error {
 	rec, err := o.store.GetSearchRequest(requestID)
 	if err != nil {
@@ -202,6 +248,7 @@ func (o *Orchestrator) enqueueDueWanted(now time.Time) {
 		}
 		query.Preferences.Formats = append([]string(nil), rec.Formats...)
 		query.Preferences.Languages = append([]string(nil), rec.Languages...)
+		query.AutoGrab = true
 		o.Enqueue(query)
 		_ = o.store.MarkWantedWorkEnqueued(rec.WorkID, now)
 		remaining--
@@ -216,6 +263,7 @@ func (o *Orchestrator) enqueueDueWanted(now time.Time) {
 		}
 		query.Preferences.Formats = append([]string(nil), rec.Formats...)
 		query.Preferences.Languages = append([]string(nil), rec.Languages...)
+		query.AutoGrab = true
 		o.Enqueue(query)
 		_ = o.store.MarkWantedAuthorEnqueued(rec.AuthorID, now)
 		remaining--
@@ -297,6 +345,7 @@ func buildRequestKey(q QuerySpec) string {
 		strings.TrimSpace(q.DOI),
 		strings.Join(q.Preferences.Formats, ","),
 		strings.Join(q.Preferences.Languages, ","),
+		fmt.Sprintf("%t", q.AutoGrab),
 	}, "|")
 	sum := sha1.Sum([]byte(base))
 	return hex.EncodeToString(sum[:])

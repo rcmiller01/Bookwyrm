@@ -27,6 +27,7 @@ func main() {
 	listenAddr := envOrDefault("INDEXER_SERVICE_ADDR", ":8091")
 	prowlarrURL := os.Getenv("PROWLARR_BASE_URL")
 	prowlarrAPIKey := os.Getenv("PROWLARR_API_KEY")
+	metadataServiceURL := os.Getenv("METADATA_SERVICE_URL")
 	databaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN"))
 	candidateRetention := atoiOrDefault(envOrDefault("INDEXER_CANDIDATE_RETENTION", "50"), 50)
 
@@ -38,6 +39,7 @@ func main() {
 	mcpRegistry := mcp.NewRegistry(store)
 	mcpRuntime := mcp.NewRuntime()
 	orchestrator := indexer.NewOrchestrator(store, strings.TrimSpace(envOrDefault("INDEXER_QUARANTINE_MODE", "last_resort")))
+	orchestrator.SetMetadataClient(indexer.NewMetadataClient(metadataServiceURL, 10*time.Second))
 	orchestrator.SetCandidateRetention(candidateRetention)
 	orchestrator.Start(rootCtx, 2)
 	reliabilityWorker := indexer.NewReliabilityWorker(store, 2*time.Minute)

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"app-backend/internal/api"
+	"app-backend/internal/autograb"
 	"app-backend/internal/domain/factory"
 	"app-backend/internal/downloadqueue"
 	"app-backend/internal/importer"
@@ -46,6 +47,8 @@ func main() {
 	nzbgetPass := os.Getenv("NZBGET_PASSWORD")
 	nzbgetCategory := envOrDefault("NZBGET_CATEGORY", "books")
 	downloadQuarantineMode := envOrDefault("DOWNLOAD_QUARANTINE_MODE", "last_resort")
+	autoGrabPollInterval := time.Duration(atoiOrDefault(envOrDefault("AUTO_GRAB_POLL_INTERVAL_SEC", "15"), 15)) * time.Second
+	autoGrabMinScore := atofOrDefault(envOrDefault("AUTO_GRAB_MIN_SCORE", "0.70"), 0.70)
 	libraryRoot := envOrDefault("LIBRARY_ROOT", "./library")
 	allowCrossDeviceMove := strings.EqualFold(envOrDefault("LIBRARY_ALLOW_CROSS_DEVICE_MOVE", "true"), "true")
 	namingTemplateEbook := envOrDefault("NAMING_TEMPLATE_EBOOK", "{Author}/{Title} ({Year})/{Title} - {Author}.{Ext}")
@@ -128,6 +131,8 @@ func main() {
 		KeepTrashDays:           keepTrashDays,
 	}, importStore, downloadStore, metaClient)
 	importEngine.Start(rootCtx)
+	autoGrabWorker := autograb.NewWorker(indexerClient, downloadManager, importStore, autoGrabPollInterval, autoGrabMinScore)
+	go autoGrabWorker.Start(rootCtx)
 
 	jobStore := store.NewInMemoryJobStore()
 	jobService := jobs.NewService(
@@ -416,4 +421,16 @@ func joinURL(base string, path string) string {
 	joinPath := "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
 	u.Path = strings.TrimRight(u.Path, "/") + joinPath
 	return u.String()
+}
+
+func atofOrDefault(raw string, fallback float64) float64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	var out float64
+	if _, err := fmt.Sscanf(raw, "%f", &out); err != nil || out <= 0 {
+		return fallback
+	}
+	return out
 }

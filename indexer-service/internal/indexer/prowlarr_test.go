@@ -30,7 +30,8 @@ func TestProwlarrAdapterSearch(t *testing.T) {
 
 	adapter := NewProwlarrAdapter("prowlarr-main", srv.URL, "key", 2*time.Second)
 	res, err := adapter.Search(context.Background(), SearchRequest{
-		Metadata: MetadataSnapshot{WorkID: "w1", Title: "Dune", Authors: []string{"Frank Herbert"}},
+		Metadata:         MetadataSnapshot{WorkID: "w1", Title: "Dune", Authors: []string{"Frank Herbert"}},
+		PreferredFormats: []string{"epub"},
 	})
 	if err != nil {
 		t.Fatalf("search error: %v", err)
@@ -71,7 +72,8 @@ func TestProwlarrAdapterSearchTorrentGrabPayload(t *testing.T) {
 
 	adapter := NewProwlarrAdapter("prowlarr-main", srv.URL, "key", 2*time.Second)
 	res, err := adapter.Search(context.Background(), SearchRequest{
-		Metadata: MetadataSnapshot{WorkID: "w2", Title: "Dune", Authors: []string{"Frank Herbert"}},
+		Metadata:         MetadataSnapshot{WorkID: "w2", Title: "Dune", Authors: []string{"Frank Herbert"}},
+		PreferredFormats: []string{"epub"},
 	})
 	if err != nil {
 		t.Fatalf("search error: %v", err)
@@ -87,5 +89,26 @@ func TestProwlarrAdapterSearchTorrentGrabPayload(t *testing.T) {
 	}
 	if res.Candidates[0].GrabPayload["torrent_url"] == nil {
 		t.Fatalf("expected torrent_url in grab payload")
+	}
+}
+
+func TestBuildQuery_PrefersISBN(t *testing.T) {
+	query := buildQuery(SearchRequest{Metadata: MetadataSnapshot{ISBN13: "9781234567890", Title: "Recursion"}, PreferredFormats: []string{"epub"}})
+	if query != "9781234567890" {
+		t.Fatalf("expected ISBN query, got %q", query)
+	}
+}
+
+func TestBuildQuery_UsesQuotedTitleAuthorAndPreferredFormat(t *testing.T) {
+	query := buildQuery(SearchRequest{Metadata: MetadataSnapshot{Title: "Project Hail Mary", Authors: []string{"Andy Weir"}}, PreferredFormats: []string{"azw3", "epub"}})
+	if query != `"Project Hail Mary" Andy Weir epub` {
+		t.Fatalf("unexpected query %q", query)
+	}
+}
+
+func TestBuildQuery_UsesQuotedSingleWordTitleAndFormat(t *testing.T) {
+	query := buildQuery(SearchRequest{Metadata: MetadataSnapshot{Title: "Recursion"}, PreferredFormats: []string{"epub", "azw3"}})
+	if query != `"Recursion" epub` {
+		t.Fatalf("unexpected query %q", query)
 	}
 }
