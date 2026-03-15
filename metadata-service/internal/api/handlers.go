@@ -545,10 +545,18 @@ func (h *Handlers) TestProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startedAt := time.Now()
 	works, err := p.SearchWorks(r.Context(), "test")
+	latencyMs := time.Since(startedAt).Milliseconds()
 	if err != nil {
+		if h.statusStore != nil {
+			_ = h.statusStore.RecordFailure(r.Context(), name)
+		}
 		writeJSON(w, ProviderTestResponse{Provider: name, Success: false, Error: err.Error()})
 		return
+	}
+	if h.statusStore != nil {
+		_ = h.statusStore.RecordSuccess(r.Context(), name, latencyMs)
 	}
 	writeJSON(w, ProviderTestResponse{Provider: name, Success: true, Works: works})
 }
