@@ -1,0 +1,83 @@
+name: Alpha Bug Report
+description: Report an alpha issue with diagnostics.
+title: "[alpha bug]: "
+labels:
+  - bug
+  - alpha
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please attach a support bundle from **Status -> Download Support Bundle**.
+  - type: input
+    id: version
+    attributes:
+      label: Bookwyrm version
+      description: Example: v0.1.0-alpha
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS version
+      description: Example: Windows 11 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment_mode
+    attributes:
+      label: Deployment mode
+      options:
+        - Windows native
+        - Docker
+        - Hybrid (native + Docker Postgres)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: download_client
+    attributes:
+      label: Download client
+      description: Example: qBittorrent, SABnzbd, NZBGet
+    validations:
+      required: false
+  - type: input
+    id: indexer_backend
+    attributes:
+      label: Indexer/backend
+      description: Example: Prowlarr, direct providers
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics attached
+      description: Confirm support bundle was attached and include relevant endpoint outputs if available.
+      placeholder: |
+        - Support bundle attached: yes/no
+        - /api/v1/system/dependencies:
+        - /api/v1/system/migration-status:
+    validations:
+      required: true
