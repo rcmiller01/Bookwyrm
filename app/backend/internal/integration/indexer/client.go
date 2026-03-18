@@ -42,6 +42,7 @@ type CandidateRecord struct {
 	ID              int64 `json:"id"`
 	SearchRequestID int64 `json:"search_request_id,omitempty"`
 	Candidate       struct {
+		Title       string         `json:"title"`
 		Protocol    string         `json:"protocol"`
 		Score       float64        `json:"score,omitempty"`
 		GrabPayload map[string]any `json:"grab_payload"`
@@ -255,6 +256,56 @@ func toFloat64(v any) float64 {
 func toString(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func (c *Client) ListSearchRequests(ctx context.Context, status string, updatedAfter *time.Time, limit int) ([]SearchRequestRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	url := fmt.Sprintf("%s/v1/indexer/searches?limit=%d", c.baseURL, limit)
+	params := []string{}
+	if strings.TrimSpace(status) != "" {
+		params = append(params, "status="+strings.TrimSpace(status))
+	}
+	if updatedAfter != nil {
+		params = append(params, "updated_after="+formatSearchTimestamp(*updatedAfter))
+	}
+	if len(params) > 0 {
+		url += "&" + strings.Join(params, "&")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var parsed struct {
+		Items []SearchRequestRecord `json:"items"`
+		Error string                `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if parsed.Error != "" {
+			return nil, fmt.Errorf("indexer-service error (%d): %s", resp.StatusCode, parsed.Error)
+		}
+		return nil, fmt.Errorf("indexer-service error (%d)", resp.StatusCode)
+	}
+	return parsed.Items, nil
+}
+
+func formatSearchTimestamp(value time.Time) string {
+	t := value.In(time.Local)
+	t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+	return t.Format(time.RFC3339)
 }
 
 func (c *Client) ListCandidates(ctx context.Context, requestID int64, limit int) ([]CandidateRecord, error) {
