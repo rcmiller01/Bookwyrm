@@ -43,8 +43,27 @@ type CandidateRecord struct {
 	SearchRequestID int64 `json:"search_request_id,omitempty"`
 	Candidate       struct {
 		Protocol    string         `json:"protocol"`
+		Score       float64        `json:"score,omitempty"`
 		GrabPayload map[string]any `json:"grab_payload"`
 	} `json:"candidate"`
+}
+
+type SearchRequestRecord struct {
+	ID         int64  `json:"id"`
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+	Status     string `json:"status"`
+	Query      struct {
+		Title       string `json:"title,omitempty"`
+		Author      string `json:"author,omitempty"`
+		ISBN        string `json:"isbn,omitempty"`
+		AutoGrab    bool   `json:"auto_grab,omitempty"`
+		Preferences struct {
+			Formats   []string `json:"formats,omitempty"`
+			Languages []string `json:"languages,omitempty"`
+		} `json:"preferences,omitempty"`
+	} `json:"query_json"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type DiagnosticsStats struct {
@@ -163,7 +182,9 @@ func (c *Client) GetCandidate(ctx context.Context, candidateID int64) (Candidate
 		SearchRequestID: toInt64(raw["search_request_id"]),
 	}
 	cand, _ := raw["candidate"].(map[string]any)
+	record.Candidate.Title = toString(cand["title"])
 	record.Candidate.Protocol = toString(cand["protocol"])
+	record.Candidate.Score = toFloat64(cand["score"])
 	record.Candidate.GrabPayload, _ = cand["grab_payload"].(map[string]any)
 	if record.Candidate.GrabPayload == nil {
 		record.Candidate.GrabPayload = map[string]any{}
@@ -211,6 +232,21 @@ func toInt64(v any) int64 {
 		return vv
 	case int:
 		return int64(vv)
+	default:
+		return 0
+	}
+}
+
+func toFloat64(v any) float64 {
+	switch vv := v.(type) {
+	case float64:
+		return vv
+	case float32:
+		return float64(vv)
+	case int64:
+		return float64(vv)
+	case int:
+		return float64(vv)
 	default:
 		return 0
 	}

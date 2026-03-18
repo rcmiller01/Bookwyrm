@@ -1,0 +1,26 @@
+ALTER TABLE download_clients
+  ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'unclassified',
+  ADD COLUMN IF NOT EXISTS reliability_score DOUBLE PRECISION NOT NULL DEFAULT 0.70;
+
+ALTER TABLE download_jobs
+  ADD COLUMN IF NOT EXISTS imported BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS download_client_metrics (
+  client_id TEXT PRIMARY KEY REFERENCES download_clients(id) ON DELETE CASCADE,
+  success_count BIGINT NOT NULL DEFAULT 0,
+  failure_count BIGINT NOT NULL DEFAULT 0,
+  total_latency_ms BIGINT NOT NULL DEFAULT 0,
+  poll_count BIGINT NOT NULL DEFAULT 0,
+  completion_count BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS download_client_reliability (
+  client_id TEXT PRIMARY KEY REFERENCES download_clients(id) ON DELETE CASCADE,
+  availability_score DOUBLE PRECISION NOT NULL DEFAULT 0.70,
+  latency_score DOUBLE PRECISION NOT NULL DEFAULT 0.70,
+  completion_score DOUBLE PRECISION NOT NULL DEFAULT 0.70,
+  composite_score DOUBLE PRECISION NOT NULL DEFAULT 0.70,
+  tier TEXT NOT NULL DEFAULT 'unclassified',
+  computed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

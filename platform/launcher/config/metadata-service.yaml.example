@@ -1,0 +1,27 @@
+# Minimal metadata-service config template for Windows alpha packages.
+# Copy to metadata-service.yaml and adjust provider settings as needed.
+
+server:
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: changeme
+  dbname: bookwyrm_backend
+
+providers:
+  openlibrary:
+    enabled: true
+  googlebooks:
+    enabled: false
+  hardcover:
+    enabled: false
+  crossref:
+    enabled: false
+
+enrichment:
+  enabled: true
+  worker_count: 2
+  max_jobs_per_request: 5

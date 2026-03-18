@@ -119,7 +119,10 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 	var active []activeProvider
 	for _, p := range all {
 		if !r.rateLimiter.Allow(p.Name()) {
-			log.Warn().Str("provider", p.Name()).Msg("rate limited, skipping")
+			log.Warn().
+				Str("provider", p.Name()).
+				Str("query", cq.Normalized).
+				Msg("provider search skipped due to rate limit")
 			continue
 		}
 		active = append(active, activeProvider{p: p, timeout: r.registry.TimeoutFor(p.Name())})
@@ -134,6 +137,11 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 			defer wg.Done()
 			pStart := time.Now()
 			metrics.ProviderRequestsTotal.WithLabelValues(ap.p.Name()).Inc()
+			log.Info().
+				Str("provider", ap.p.Name()).
+				Str("query", cq.Normalized).
+				Dur("timeout", ap.timeout).
+				Msg("provider search started")
 
 			// Derive context from caller — if the request is abandoned the
 			// parent ctx is cancelled, which propagates here immediately.
@@ -147,11 +155,22 @@ func (r *defaultResolver) SearchWorks(ctx context.Context, query string) ([]mode
 
 			if err != nil {
 				metrics.ProviderFailuresTotal.WithLabelValues(ap.p.Name()).Inc()
-				log.Warn().Err(err).Str("provider", ap.p.Name()).Msg("provider search failed")
+				log.Warn().
+					Err(err).
+					Str("provider", ap.p.Name()).
+					Str("query", cq.Normalized).
+					Int64("latency_ms", elapsed.Milliseconds()).
+					Msg("provider search failed")
 				r.recordFailure(context.Background(), ap.p.Name())
 				return
 			}
 			metrics.ProviderSuccessTotal.WithLabelValues(ap.p.Name()).Inc()
+			log.Info().
+				Str("provider", ap.p.Name()).
+				Str("query", cq.Normalized).
+				Int("result_count", len(results)).
+				Int64("latency_ms", elapsed.Milliseconds()).
+				Msg("provider search completed")
 			r.recordSuccess(context.Background(), ap.p.Name(), elapsed)
 			resultsCh <- ProviderResult{Provider: ap.p.Name(), Works: results}
 		}(ap)
@@ -257,24 +276,62 @@ func (r *defaultResolver) ResolveIdentifier(ctx context.Context, idType string, 
 		IdentifierValue: value,
 	}, r.registry.EnabledProviders()) {
 		if !supportsIdentifier(p, idType) {
+			log.Debug().
+				Str("provider", p.Name()).
+				Str("identifier_type", idType).
+				Str("identifier_value", value).
+				Msg("provider identifier lookup skipped due to unsupported capability")
 			continue
 		}
 		if !r.rateLimiter.Allow(p.Name()) {
+			log.Warn().
+				Str("provider", p.Name()).
+				Str("identifier_type", idType).
+				Str("identifier_value", value).
+				Msg("provider identifier lookup skipped due to rate limit")
 			continue
 		}
 		metrics.ProviderRequestsTotal.WithLabelValues(p.Name()).Inc()
 		pStart := time.Now()
+		log.Info().
+			Str("provider", p.Name()).
+			Str("identifier_type", idType).
+			Str("identifier_value", value).
+			Msg("provider identifier lookup started")
 		edition, err := p.ResolveIdentifier(ctx, idType, value)
 		elapsed := time.Since(pStart)
 		metrics.ProviderLatencyMs.WithLabelValues(p.Name()).Observe(float64(elapsed.Milliseconds()))
 		if err == nil && edition != nil {
 			metrics.ProviderSuccessTotal.WithLabelValues(p.Name()).Inc()
+			log.Info().
+				Str("provider", p.Name()).
+				Str("identifier_type", idType).
+				Str("identifier_value", value).
+				Int64("latency_ms", elapsed.Milliseconds()).
+				Str("edition_id", edition.ID).
+				Msg("provider identifier lookup completed")
 			r.recordSuccess(context.Background(), p.Name(), elapsed)
 			r.cache.Set(cacheKey, *edition, time.Hour)
 			r.scheduleIdentifierEnrichment(context.Background(), *edition)
 			return edition, nil
 		}
 		metrics.ProviderFailuresTotal.WithLabelValues(p.Name()).Inc()
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("provider", p.Name()).
+				Str("identifier_type", idType).
+				Str("identifier_value", value).
+				Int64("latency_ms", elapsed.Milliseconds()).
+				Msg("provider identifier lookup failed")
+		} else {
+			log.Info().
+				Str("provider", p.Name()).
+				Str("identifier_type", idType).
+				Str("identifier_value", value).
+				Int64("latency_ms", elapsed.Milliseconds()).
+				Msg("provider identifier lookup returned no match")
+		}
 		r.recordFailure(context.Background(), p.Name())
 	}
 

@@ -1,0 +1,7 @@
+./fingerprint.go
+./identity.go
+./merge.go
+./normalize.go
+./query_classifier.go
+./query_router.go
+./resolver.go
