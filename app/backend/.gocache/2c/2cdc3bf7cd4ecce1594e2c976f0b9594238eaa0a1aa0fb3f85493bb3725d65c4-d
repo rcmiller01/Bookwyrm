@@ -1,0 +1,6 @@
+./manager.go
+./migrate.go
+./pgstore.go
+./storage.go
+./store.go
+./types.go

@@ -11,7 +11,7 @@ export function StatusBadge({ label }: { label: string }) {
           normalized === 'cutoff_unmet' ||
           normalized === 'quarantine'
         ? 'border-amber-700 text-amber-300 bg-amber-950/30'
-        : normalized === 'failed' || normalized === 'error'
+        : normalized === 'source missing' || normalized === 'failed' || normalized === 'error'
           ? 'border-red-700 text-red-300 bg-red-950/30'
           : 'border-slate-700 text-slate-300 bg-slate-900/40'
 

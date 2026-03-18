@@ -1,0 +1,12 @@
+./fingerprint.go
+./identity.go
+./merge.go
+./normalize.go
+./query_classifier.go
+./query_router.go
+./resolver.go
+./enrichment_hook_test.go
+./merge_test.go
+./query_router_test.go
+./reliability_integration_test.go
+./resolver_test.go

@@ -1,0 +1,34 @@
+# Environment & secrets
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.coverprofile
+coverage/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini

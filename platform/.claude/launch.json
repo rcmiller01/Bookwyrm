@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "metadata-service",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/server"],
+      "cwd": "metadata-service",
+      "port": 8080
+    },
+    {
+      "name": "indexer-service",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/server"],
+      "cwd": "indexer-service",
+      "port": 8091
+    },
+    {
+      "name": "app-backend",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/server"],
+      "cwd": "app/backend",
+      "port": 8090,
+      "env": {
+        "UI_DIST_DIR": "./web/dist",
+        "METADATA_SERVICE_URL": "http://localhost:8080",
+        "INDEXER_SERVICE_URL": "http://localhost:8091",
+        "LIBRARY_ROOT": "./library"
+      }
+    }
+  ]
+}
