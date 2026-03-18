@@ -1,0 +1,15 @@
+./authors.go
+./content_sources.go
+./db.go
+./editions.go
+./enrichment_jobs.go
+./identifiers.go
+./migrate.go
+./provider_metrics.go
+./provider_reliability.go
+./providers.go
+./recommend_reads.go
+./series.go
+./subjects.go
+./work_relationships.go
+./works.go

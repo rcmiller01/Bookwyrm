@@ -283,6 +283,65 @@ Implementation notes:
 - Primary button is `Approve & Run Import`.
 - Secondary action is `Approve Only`.
 
+## 14. Dead-Source Import UX Refinement
+
+Problem:
+- Old import jobs whose NZBGet source folders had already been deleted still looked like generic failed imports.
+- Approving and rerunning those jobs felt like the button did nothing because the rerun died immediately on a missing path.
+
+Result:
+- Missing-source imports now surface as a distinct issue in both the import review page and history.
+- Recovery guidance tells the user to retry the download instead of repeatedly approving a dead job.
+
+Source files:
+- `app/backend/internal/importer/engine.go`
+- `app/backend/web/src/lib/importIssues.ts`
+- `app/backend/web/src/pages/ImportListPage.tsx`
+- `app/backend/web/src/pages/ImportListPage.test.tsx`
+- `app/backend/web/src/pages/HistoryPage.tsx`
+- `app/backend/web/src/components/StatusBadge.tsx`
+
+Implementation notes:
+- Importer checks source-path existence before scanning and returns a clearer missing-source error.
+- Web UI maps those failures to `Source Missing`.
+- Review panel shows an explicit recovery hint for dead-source jobs.
+
+## 15. Metadata Search Observability
+
+Problem:
+- It was hard to tell from logs whether a metadata search ran at all, or whether a specific provider such as Anna's Archive actually participated.
+
+Result:
+- Metadata service now logs request-level search activity and per-provider dispatch/outcome details.
+- Operators can confirm Anna participation directly from `metadata-service.log` without relying only on metrics.
+
+Source files:
+- `metadata-service/internal/api/handlers.go`
+- `metadata-service/internal/resolver/resolver.go`
+
+Implementation notes:
+- Log search start/completion with query, latency, and result count.
+- Log provider search start/completion/failure with provider name, normalized query, latency, and result count.
+- Log identifier lookups with provider participation and outcome as well.
+
+## 16. Auto-Grab Candidate Ranking Refinement
+
+Problem:
+- Auto-grab still selected the first eligible candidate, which could prefer a weaker match over a better author/format-aligned release.
+
+Result:
+- Auto-grab now ranks acceptable candidates locally before choosing one.
+- Ebook requests reject audiobook-only releases, audio requests prefer audio releases, and author-aligned candidates score higher.
+
+Source files:
+- `app/backend/internal/autograb/worker.go`
+- `app/backend/internal/autograb/worker_test.go`
+
+Implementation notes:
+- Added local candidate preference scoring on top of upstream indexer score.
+- Stronger selection uses normalized title phrase, author-token overlap, and requested format mode.
+- Format matching now distinguishes ebook-only vs audio-only requests.
+
 ## Live-Config / Deployment Notes
 
 These were live-install details, not necessarily source changes to upstream directly:
@@ -301,6 +360,17 @@ Run at minimum:
 - `go test ./internal/indexer` or relevant `indexer-service` packages
 - `go test ./internal/provider/annasarchive` from `metadata-service`
 - `npm run build` from `app/backend/web`
+
+Validation completed during the March 15 refinement pass:
+- `go test ./internal/importer` from `app/backend`
+- `go test ./internal/autograb` from `app/backend`
+- `go test ./internal/resolver` from `metadata-service`
+- `go test ./internal/api` from `metadata-service`
+- `npm run build` from `app/backend/web`
+
+Frontend build stability note:
+- Added a local type shim for `@tanstack/react-virtual` in `app/backend/web/src/types/tanstack-react-virtual.d.ts` because the published package metadata pointed at a missing ESM declaration file in this environment.
+- Added explicit `@rollup/rollup-win32-x64-msvc` dev dependency in `app/backend/web/package.json` to make Windows frontend builds deterministic when npm skips Rollup's optional native package.
 
 ## Suggested Upstream Review Focus
 
