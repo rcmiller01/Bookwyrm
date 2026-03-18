@@ -129,7 +129,7 @@ func (w *Worker) pickCandidate(ctx context.Context, req indexer.SearchRequestRec
 	log.Printf("auto-grab: search %d returned %d candidates", req.ID, len(candidates))
 	for _, candidate := range candidates {
 		log.Printf("auto-grab: candidate id=%d score=%.3f title=%q protocol=%s payload=%d", candidate.ID, candidate.Candidate.Score, candidate.Candidate.Title, candidate.Candidate.Protocol, len(candidate.Candidate.GrabPayload))
-		if !candidateEligible(candidate, req) {
+		if !candidateEligible(candidate, req, w.minScore) {
 			continue
 		}
 		return candidate, true
@@ -137,8 +137,11 @@ func (w *Worker) pickCandidate(ctx context.Context, req indexer.SearchRequestRec
 	return indexer.CandidateRecord{}, false
 }
 
-func candidateEligible(candidate indexer.CandidateRecord, req indexer.SearchRequestRecord) bool {
-	if candidate.Candidate.Score < 0.70 {
+func candidateEligible(candidate indexer.CandidateRecord, req indexer.SearchRequestRecord, minScore float64) bool {
+	if minScore <= 0 {
+		minScore = 0.70
+	}
+	if candidate.Candidate.Score < minScore {
 		return false
 	}
 	if len(candidate.Candidate.GrabPayload) == 0 {

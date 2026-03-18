@@ -155,7 +155,21 @@ export function BookDetailPage() {
             <button className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" onClick={() => monitorMutation.mutate(!wanted?.enabled)}>
               {wanted?.enabled ? 'Unmonitor' : 'Monitor'}
             </button>
-            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => navigate(`${manualSearchPath}&autorun=1`)}>
+            <button
+              className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300"
+              onClick={() =>
+                navigate(
+                  buildManualSearchPath({
+                    workID,
+                    title: workQuery.data?.work?.title?.trim() || workID,
+                    author: (workQuery.data?.work?.authors ?? []).map((entry) => entry.name?.trim()).filter(Boolean).join(', '),
+                    formats: buildWantedWorkPayload(profilesQuery.data, wanted?.profile_id).formats,
+                    autorun: true,
+                    autoGrab: true
+                  })
+                )
+              }
+            >
               Search now
             </button>
             <Link className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200" to={manualSearchPath}>
@@ -232,7 +246,21 @@ export function BookDetailPage() {
         <div className="rounded border border-slate-800 bg-slate-900/50 p-4 text-sm text-slate-200">
           <p>Manual search and candidate scoring are available in the dedicated search view.</p>
           <div className="mt-3 flex gap-2">
-            <button className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300" onClick={() => navigate(`${manualSearchPath}&autorun=1`)}>
+            <button
+              className="rounded border border-emerald-700 px-3 py-1.5 text-sm text-emerald-300"
+              onClick={() =>
+                navigate(
+                  buildManualSearchPath({
+                    workID,
+                    title: workQuery.data?.work?.title?.trim() || workID,
+                    author: (workQuery.data?.work?.authors ?? []).map((entry) => entry.name?.trim()).filter(Boolean).join(', '),
+                    formats: buildWantedWorkPayload(profilesQuery.data, wanted?.profile_id).formats,
+                    autorun: true,
+                    autoGrab: true
+                  })
+                )
+              }
+            >
               Search now
             </button>
             <Link className="rounded border border-sky-700 px-3 py-1.5 text-sm text-sky-300" to={manualSearchPath}>

@@ -19,6 +19,7 @@ type MetadataSnapshot struct {
 
 type SearchRequest struct {
 	Metadata              MetadataSnapshot `json:"metadata"`
+	PreferredFormats      []string         `json:"preferred_formats,omitempty"`
 	RequestedCapabilities []string         `json:"requested_capabilities,omitempty"`
 	Priority              string           `json:"priority,omitempty"`
 	PolicyProfile         string           `json:"policy_profile,omitempty"`
@@ -96,6 +97,8 @@ type QuerySpec struct {
 		Languages []string `json:"languages,omitempty"`
 	} `json:"preferences,omitempty"`
 
+	AutoGrab bool `json:"auto_grab,omitempty"`
+
 	Limits struct {
 		MaxCandidates int `json:"max_candidates,omitempty"`
 		TimeoutSec    int `json:"timeout_sec,omitempty"`
@@ -161,6 +164,14 @@ type SearchRequestRecord struct {
 	LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type SearchRequestFilter struct {
+	Status       string     `json:"status,omitempty"`
+	EntityType   string     `json:"entity_type,omitempty"`
+	EntityID     string     `json:"entity_id,omitempty"`
+	UpdatedAfter *time.Time `json:"updated_after,omitempty"`
+	Limit        int        `json:"limit,omitempty"`
 }
 
 type CandidateRecord struct {

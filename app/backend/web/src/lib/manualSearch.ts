@@ -26,6 +26,9 @@ export function buildManualSearchPath(params: ManualSearchParams): string {
   if (params.autorun) {
     query.set('autorun', '1')
   }
+  if (params.autoGrab) {
+    query.set('autoGrab', '1')
+  }
   return `/library/books/manual-search?${query.toString()}`
 }
 

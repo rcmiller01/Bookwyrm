@@ -11,7 +11,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
-import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
+import { buildWantedWorkPayload, getProfileFormats, pickProfileIDForMediaType, type ProfilesResponse } from '../lib/wantedWork'
 import { errorMessage } from '../lib/errorMessage'
 import { buildManualSearchPath } from '../lib/manualSearch'
 import { getPresetsForPage } from '../presets/views'
@@ -205,14 +205,17 @@ export function BooksPage() {
           title: titleQuery.data?.get(workID)?.title ?? workID,
           author: titleQuery.data?.get(workID)?.author ?? '',
           monitored: Boolean(wanted?.enabled),
-          profileID: wanted?.profile_id || defaultProfileID,
+          profileID: wanted?.profile_id
+            || ((bestFormat === 'm4b' || bestFormat === 'mp3' || bestFormat === 'm4a')
+              ? (pickProfileIDForMediaType(profilesQuery.data, 'audiobook') || defaultProfileID)
+              : defaultProfileID),
           hasFile: (fileCountByWork.get(workID) ?? 0) > 0,
           bestFormat,
           cutoffUnmet: Boolean(wanted?.enabled && wanted?.ignore_upgrades !== true && (fileCountByWork.get(workID) ?? 0) > 0 && bestFormat === 'pdf')
         }
       })
       .sort((a, b) => a.title.localeCompare(b.title))
-  }, [libraryItemsQuery.data?.items, monitoredByWork, titleQuery.data, defaultProfileID, workIDs])
+  }, [libraryItemsQuery.data?.items, monitoredByWork, titleQuery.data, defaultProfileID, profilesQuery.data, workIDs])
 
   const filteredRows = useMemo(() => {
     const filtered = rows.filter((row) => {
@@ -412,8 +415,9 @@ export function BooksPage() {
                         workID: row.workID,
                         title: row.title,
                         author: row.author,
+                        formats: getProfileFormats(profilesQuery.data, row.profileID),
                         autorun: true,
-          autoGrab: true
+                        autoGrab: true
                       })
                     )
                   }

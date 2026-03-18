@@ -210,6 +210,10 @@ func inferFormat(title string) string {
 	switch {
 	case strings.Contains(lower, "audiobook"):
 		return "audiobook"
+	case strings.Contains(lower, "m4b"):
+		return "m4b"
+	case strings.Contains(lower, "mp3"):
+		return "mp3"
 	case strings.Contains(lower, "epub"):
 		return "epub"
 	case strings.Contains(lower, "pdf"):

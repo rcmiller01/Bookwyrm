@@ -18,6 +18,7 @@ type Storage interface {
 
 	CreateOrGetSearchRequest(requestKey string, query QuerySpec, maxAttempts int) SearchRequestRecord
 	GetSearchRequest(id int64) (SearchRequestRecord, error)
+	ListSearchRequests(filter SearchRequestFilter) []SearchRequestRecord
 	TryLockNextSearchRequest(workerID string, now time.Time) (SearchRequestRecord, bool, error)
 	RecoverExpiredSearchRequests(now time.Time, limit int) (int, error)
 	RescheduleSearchRequest(id int64, lastErr string, notBefore time.Time, terminal bool) error

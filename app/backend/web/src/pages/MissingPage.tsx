@@ -10,7 +10,7 @@ import { useToast } from '../components/ToastProvider'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useSavedViews } from '../hooks/useSavedViews'
 import { deleteNoContent, fetchJSON, postJSON } from '../lib/api'
-import { buildWantedWorkPayload, type ProfilesResponse } from '../lib/wantedWork'
+import { buildWantedWorkPayload, getProfileFormats, type ProfilesResponse } from '../lib/wantedWork'
 import { errorMessage } from '../lib/errorMessage'
 import { buildManualSearchPath } from '../lib/manualSearch'
 import { getPresetsForPage } from '../presets/views'
@@ -139,7 +139,10 @@ export function MissingPage() {
 
   const createMutation = useMutation({
     mutationFn: async (workID: string) => {
-      await postJSON(`/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`, buildWantedWorkPayload(profilesQuery.data))
+      await postJSON(
+        `/ui-api/indexer/wanted/works/${encodeURIComponent(workID)}`,
+        buildWantedWorkPayload(profilesQuery.data, undefined, mediaType === 'audiobook' ? 'audiobook' : 'ebook')
+      )
     },
     onSuccess: async () => {
       pushToast('Wanted work added')
@@ -335,8 +338,9 @@ export function MissingPage() {
                         workID: row.workID,
                         title: row.title,
                         author: row.author,
+                        formats: getProfileFormats(profilesQuery.data, row.profileID === '-' ? undefined : row.profileID),
                         autorun: true,
-          autoGrab: true
+                        autoGrab: true
                       })
                     )
                   }

@@ -229,6 +229,37 @@ func (s *PGStore) GetSearchRequest(id int64) (SearchRequestRecord, error) {
 	return scanSearchRequestRow(row)
 }
 
+func (s *PGStore) ListSearchRequests(filter SearchRequestFilter) []SearchRequestRecord {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(context.Background(), `
+		SELECT id, request_key, entity_type, entity_id, query_json, status, attempt_count, max_attempts, COALESCE(last_error,''), not_before, locked_at, COALESCE(locked_by,''), lease_expires_at, created_at, updated_at
+		FROM indexer_search_requests
+		WHERE ($1 = '' OR status = $1)
+		  AND ($2 = '' OR entity_type = $2)
+		  AND ($3 = '' OR entity_id = $3)
+		  AND ($4::timestamptz IS NULL OR updated_at > $4)
+		ORDER BY updated_at DESC, id DESC
+		LIMIT $5`,
+		filter.Status, filter.EntityType, filter.EntityID, filter.UpdatedAfter, limit,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]SearchRequestRecord, 0)
+	for rows.Next() {
+		rec, scanErr := scanSearchRequestRow(rows)
+		if scanErr != nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
 func (s *PGStore) TryLockNextSearchRequest(workerID string, now time.Time) (SearchRequestRecord, bool, error) {
 	tx, err := s.db.Begin(context.Background())
 	if err != nil {

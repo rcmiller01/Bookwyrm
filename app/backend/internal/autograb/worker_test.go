@@ -18,7 +18,7 @@ func TestCandidateEligible_RejectsNonBookRecursionMatches(t *testing.T) {
 	candidate.Candidate.Score = 0.75
 	candidate.Candidate.GrabPayload = map[string]any{"nzb_url": "http://example.test"}
 
-	if candidateEligible(candidate, req) {
+	if candidateEligible(candidate, req, 0.70) {
 		t.Fatalf("expected non-book recursion candidate to be rejected")
 	}
 }
@@ -35,7 +35,7 @@ func TestCandidateEligible_AcceptsMatchingEbookRelease(t *testing.T) {
 	candidate.Candidate.Score = 0.91
 	candidate.Candidate.GrabPayload = map[string]any{"nzb_url": "http://example.test"}
 
-	if !candidateEligible(candidate, req) {
+	if !candidateEligible(candidate, req, 0.70) {
 		t.Fatalf("expected ebook release candidate to be accepted")
 	}
 }
@@ -56,7 +56,7 @@ func TestCandidateEligible_RejectsCourseAndEpisodeNoise(t *testing.T) {
 		candidate.Candidate.Protocol = "usenet"
 		candidate.Candidate.Score = 0.80
 		candidate.Candidate.GrabPayload = map[string]any{"nzb_url": "http://example.test"}
-		if candidateEligible(candidate, req) {
+		if candidateEligible(candidate, req, 0.70) {
 			t.Fatalf("expected %q to be rejected", title)
 		}
 	}

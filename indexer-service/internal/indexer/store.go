@@ -290,6 +290,41 @@ func (s *Store) GetSearchRequest(id int64) (SearchRequestRecord, error) {
 	return rec, nil
 }
 
+func (s *Store) ListSearchRequests(filter SearchRequestFilter) []SearchRequestRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]SearchRequestRecord, 0, len(s.searchRequests))
+	for _, rec := range s.searchRequests {
+		if filter.Status != "" && rec.Status != filter.Status {
+			continue
+		}
+		if filter.EntityType != "" && rec.EntityType != filter.EntityType {
+			continue
+		}
+		if filter.EntityID != "" && rec.EntityID != filter.EntityID {
+			continue
+		}
+		if filter.UpdatedAfter != nil && !rec.UpdatedAt.After(*filter.UpdatedAfter) {
+			continue
+		}
+		out = append(out, rec)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].UpdatedAt.After(out[j].UpdatedAt)
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
 func (s *Store) TryLockNextSearchRequest(workerID string, now time.Time) (SearchRequestRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
