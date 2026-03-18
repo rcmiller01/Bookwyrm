@@ -70,6 +70,17 @@ var (
 	annasTitleSuffixRe = regexp.MustCompile(`(?i)\s+-\s+anna'?s archive.*$`)
 )
 
+var publisherStopMarkers = []string{
+	" Publication year ",
+	" Published ",
+	" Year ",
+	" File type ",
+	" Format ",
+	" Extension ",
+	" ISBN ",
+	" Language ",
+}
+
 type searchResult struct {
 	MD5       string
 	Title     string
@@ -265,6 +276,12 @@ func parsePublisher(htmlBody string) string {
 		return "Anna's Archive"
 	}
 	publisher := strings.TrimSpace(match[1])
+	for _, marker := range publisherStopMarkers {
+		if idx := strings.Index(publisher, marker); idx >= 0 {
+			publisher = strings.TrimSpace(publisher[:idx])
+			break
+		}
+	}
 	if publisher == "" {
 		return "Anna's Archive"
 	}
