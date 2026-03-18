@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { fetchJSON } from '../lib/api'
+import { importIssueLabel, importRecoveryHint, isMissingSourceError } from '../lib/importIssues'
 
 type DownloadJob = {
   id: number
@@ -22,6 +23,7 @@ type ImportJob = {
   status: string
   updated_at: string
   source_path: string
+  last_error?: string
 }
 type ImportJobsResponse = { items: ImportJob[] }
 
@@ -66,9 +68,11 @@ export function HistoryPage() {
       kind: 'import',
       sourceID: job.id,
       workID: job.work_id || '-',
-      status: job.status,
+      status: job.status === 'failed' && isMissingSourceError(job.last_error) ? 'Source Missing' : job.status,
       updatedAt: job.updated_at,
-      detail: job.source_path
+      detail: job.status === 'failed'
+        ? [importIssueLabel(job.last_error), importRecoveryHint(job.last_error) || job.source_path].filter(Boolean).join(' - ')
+        : job.source_path
     }))
 
     return [...fromDownloads, ...fromImports]

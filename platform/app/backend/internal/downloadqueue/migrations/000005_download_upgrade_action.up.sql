@@ -1,0 +1,1 @@
+ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS upgrade_action TEXT NOT NULL DEFAULT 'ask';

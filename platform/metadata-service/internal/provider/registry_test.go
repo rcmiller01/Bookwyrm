@@ -1,0 +1,261 @@
+package provider
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"metadata-service/internal/model"
+)
+
+// stubProvider is a minimal Provider implementation for testing.
+type stubProvider struct {
+	name string
+}
+
+func (s *stubProvider) Name() string { return s.name }
+func (s *stubProvider) SearchWorks(_ context.Context, _ string) ([]model.Work, error) {
+	return nil, nil
+}
+func (s *stubProvider) GetWork(_ context.Context, _ string) (*model.Work, error) { return nil, nil }
+func (s *stubProvider) GetEditions(_ context.Context, _ string) ([]model.Edition, error) {
+	return nil, nil
+}
+func (s *stubProvider) ResolveIdentifier(_ context.Context, _, _ string) (*model.Edition, error) {
+	return nil, nil
+}
+
+func TestRegistry_PriorityOrdering(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"slow"}, 30, true)
+	reg.RegisterWithConfig(&stubProvider{"fast"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"mid"}, 20, true)
+
+	got := reg.EnabledProviders()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 providers, got %d", len(got))
+	}
+	want := []string{"fast", "mid", "slow"}
+	for i, p := range got {
+		if p.Name() != want[i] {
+			t.Errorf("position %d: want %q, got %q", i, want[i], p.Name())
+		}
+	}
+}
+
+func TestRegistry_SamePriorityStable(t *testing.T) {
+	// All enabled providers should appear even when priorities are equal.
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"a"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"b"}, 10, true)
+
+	got := reg.EnabledProviders()
+	if len(got) != 2 {
+		t.Errorf("expected 2 providers, got %d", len(got))
+	}
+}
+
+func TestRegistry_SetEnabled_Disable(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"alpha"}, 1, true)
+	reg.RegisterWithConfig(&stubProvider{"beta"}, 2, true)
+
+	reg.SetEnabled("alpha", false)
+
+	got := reg.EnabledProviders()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 provider after disable, got %d", len(got))
+	}
+	if got[0].Name() != "beta" {
+		t.Errorf("expected beta, got %s", got[0].Name())
+	}
+}
+
+func TestRegistry_SetEnabled_Reenable(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"x"}, 1, false)
+
+	if len(reg.EnabledProviders()) != 0 {
+		t.Fatal("expected 0 enabled providers initially")
+	}
+
+	reg.SetEnabled("x", true)
+	if len(reg.EnabledProviders()) != 1 {
+		t.Fatal("expected 1 enabled provider after re-enable")
+	}
+}
+
+func TestRegistry_SetEnabled_UnknownName(t *testing.T) {
+	// SetEnabled on a non-existent provider must not panic.
+	reg := NewRegistry()
+	reg.SetEnabled("nonexistent", true)
+}
+
+func TestRegistry_AllProviders_IncludesDisabled(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"on"}, 1, true)
+	reg.RegisterWithConfig(&stubProvider{"off"}, 2, false)
+
+	all := reg.AllProviders()
+	if len(all) != 2 {
+		t.Errorf("AllProviders expected 2, got %d", len(all))
+	}
+	enabled := reg.EnabledProviders()
+	if len(enabled) != 1 {
+		t.Errorf("EnabledProviders expected 1, got %d", len(enabled))
+	}
+}
+
+func TestRegistry_Register_DefaultsEnabledPriority100(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"default"})
+
+	all := reg.AllProviders()
+	rp, ok := all["default"]
+	if !ok {
+		t.Fatal("provider not found")
+	}
+	if !rp.enabled {
+		t.Error("default Register should set enabled=true")
+	}
+	if rp.priority != 100 {
+		t.Errorf("default Register should set priority=100, got %d", rp.priority)
+	}
+}
+
+func TestRegistry_Get(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"myp"})
+
+	p, ok := reg.Get("myp")
+	if !ok || p.Name() != "myp" {
+		t.Error("Get should return registered provider")
+	}
+	_, ok = reg.Get("missing")
+	if ok {
+		t.Error("Get should return false for unknown provider")
+	}
+}
+
+func TestRegistry_SetPriority_ChangesDispatchOrder(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"first"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"second"}, 20, true)
+
+	// Flip priorities at runtime
+	reg.SetPriority("first", 99)
+	reg.SetPriority("second", 1)
+
+	got := reg.EnabledProviders()
+	if got[0].Name() != "second" {
+		t.Errorf("after SetPriority, expected 'second' first, got %q", got[0].Name())
+	}
+	if got[1].Name() != "first" {
+		t.Errorf("after SetPriority, expected 'first' second, got %q", got[1].Name())
+	}
+}
+
+func TestRegistry_SetPriority_UnknownName_NoPanic(t *testing.T) {
+	reg := NewRegistry()
+	reg.SetPriority("nonexistent", 5) // must not panic
+}
+
+func TestRegistry_TimeoutFor_DefaultWhenNotSet(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"p"})
+
+	got := reg.TimeoutFor("p")
+	if got != defaultProviderTimeout {
+		t.Errorf("expected default timeout %v, got %v", defaultProviderTimeout, got)
+	}
+}
+
+func TestRegistry_TimeoutFor_FallbackForUnknown(t *testing.T) {
+	reg := NewRegistry()
+	got := reg.TimeoutFor("missing")
+	if got != defaultProviderTimeout {
+		t.Errorf("unknown provider should return default timeout, got %v", got)
+	}
+}
+
+func TestRegistry_SetTimeout_OverridesDefault(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"slow"})
+	reg.SetTimeout("slow", 30*time.Second)
+
+	got := reg.TimeoutFor("slow")
+	if got != 30*time.Second {
+		t.Errorf("expected 30s timeout after SetTimeout, got %v", got)
+	}
+}
+
+func TestRegistry_SetTimeout_UnknownName_NoPanic(t *testing.T) {
+	reg := NewRegistry()
+	reg.SetTimeout("nonexistent", 5*time.Second) // must not panic
+}
+
+func TestRegistry_SetTimeout_IndependentPerProvider(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&stubProvider{"fast"})
+	reg.Register(&stubProvider{"slow"})
+	reg.SetTimeout("fast", 5*time.Second)
+	reg.SetTimeout("slow", 30*time.Second)
+
+	if got := reg.TimeoutFor("fast"); got != 5*time.Second {
+		t.Errorf("fast timeout: want 5s, got %v", got)
+	}
+	if got := reg.TimeoutFor("slow"); got != 30*time.Second {
+		t.Errorf("slow timeout: want 30s, got %v", got)
+	}
+}
+
+func TestRegistry_ReliabilityTierOrdering(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"a"}, 10, true)
+	reg.RegisterWithConfig(&stubProvider{"b"}, 20, true)
+	reg.RegisterWithConfig(&stubProvider{"c"}, 30, true)
+
+	reg.SetReliability("b", 0.95) // primary
+	reg.SetReliability("c", 0.65) // secondary
+	reg.SetReliability("a", 0.45) // fallback
+
+	got := reg.EnabledProviders()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 providers, got %d", len(got))
+	}
+	want := []string{"b", "c", "a"}
+	for i, p := range got {
+		if p.Name() != want[i] {
+			t.Errorf("position %d: want %q, got %q", i, want[i], p.Name())
+		}
+	}
+}
+
+func TestRegistry_QuarantineNotSkippedByDefault(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"q"}, 1, true)
+	reg.SetReliability("q", 0.2) // quarantine tier
+
+	got := reg.EnabledProviders()
+	if len(got) != 1 {
+		t.Fatalf("expected quarantine provider to remain dispatchable by default, got %d providers", len(got))
+	}
+}
+
+func TestRegistry_QuarantineCanBeSkipped(t *testing.T) {
+	reg := NewRegistry()
+	reg.RegisterWithConfig(&stubProvider{"good"}, 1, true)
+	reg.RegisterWithConfig(&stubProvider{"bad"}, 2, true)
+	reg.SetReliability("good", 0.9)
+	reg.SetReliability("bad", 0.1) // quarantine tier
+
+	reg.SetQuarantineDisables(true)
+
+	got := reg.EnabledProviders()
+	if len(got) != 1 {
+		t.Fatalf("expected only 1 provider when quarantine is skipped, got %d", len(got))
+	}
+	if got[0].Name() != "good" {
+		t.Fatalf("expected good provider, got %q", got[0].Name())
+	}
+}

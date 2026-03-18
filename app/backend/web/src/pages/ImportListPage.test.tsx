@@ -4,7 +4,15 @@ import { renderWithProviders, mockFetchRoutes } from '../test-utils'
 
 const mockImportJobs = [
   { id: 1, status: 'needs_review', source_path: '/incoming/book.epub', work_id: 'w1', matched_title: 'Test Book', created_at: '2024-01-01T00:00:00Z' },
-  { id: 2, status: 'needs_review', source_path: '/incoming/book2.epub', work_id: 'w2', matched_title: 'Another Book', created_at: '2024-01-02T00:00:00Z' },
+  {
+    id: 2,
+    status: 'needs_review',
+    source_path: '/incoming/book2.epub',
+    work_id: 'w2',
+    matched_title: 'Another Book',
+    created_at: '2024-01-02T00:00:00Z',
+    last_error: 'source path no longer exists: /incoming/book2.epub (retry the download to recreate it)'
+  },
 ]
 
 describe('ImportListPage', () => {
@@ -27,6 +35,13 @@ describe('ImportListPage', () => {
     renderWithProviders(<ImportListPage />)
     await waitFor(() => {
       expect(screen.getByText(/book\.epub/)).toBeTruthy()
+    })
+  })
+
+  it('shows source missing label for dead-source import jobs', async () => {
+    renderWithProviders(<ImportListPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Source Missing')).toBeTruthy()
     })
   })
 })

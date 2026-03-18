@@ -1,0 +1,15 @@
+./engine.go
+./filescan.go
+./renamer.go
+./sanitize.go
+./store.go
+./store_memory.go
+./store_pg.go
+./template.go
+./types.go
+./e2e_golden_pipeline_test.go
+./engine_test.go
+./filescan_test.go
+./metrics_test.go
+./renamer_test.go
+./store_memory_test.go
