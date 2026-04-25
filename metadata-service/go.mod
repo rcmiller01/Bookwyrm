@@ -1,6 +1,6 @@
 module metadata-service
 
-go 1.24.0
+go 1.25.0
 
 require (
 	bookwyrm/platform/metrics v0.0.0
@@ -10,7 +10,7 @@ require (
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/rs/zerolog v1.34.0
